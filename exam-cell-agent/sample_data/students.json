@@ -1,0 +1,22 @@
+[
+  {"name": "Alex Smith",      "reg_no": "2026CSE001", "course_code": "CS301", "course_name": "Data Structures",          "semester": 3},
+  {"name": "Alex Smith",      "reg_no": "2026CSE001", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1},
+  {"name": "Priya Sharma",    "reg_no": "2026ECE012", "course_code": "EC301", "course_name": "Signals and Systems",       "semester": 3},
+  {"name": "Priya Sharma",    "reg_no": "2026ECE012", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1},
+  {"name": "Ravi Kumar",      "reg_no": "2026CSE002", "course_code": "CS301", "course_name": "Data Structures",          "semester": 3},
+  {"name": "Ravi Kumar",      "reg_no": "2026CSE002", "course_code": "CS302", "course_name": "Operating Systems",        "semester": 3},
+  {"name": "Meena Raj",       "reg_no": "2026MECH03", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1},
+  {"name": "Meena Raj",       "reg_no": "2026MECH03", "course_code": "ME301", "course_name": "Thermodynamics",           "semester": 3},
+  {"name": "Suresh Babu",     "reg_no": "2026ECE013", "course_code": "EC301", "course_name": "Signals and Systems",       "semester": 3},
+  {"name": "Suresh Babu",     "reg_no": "2026ECE013", "course_code": "EC302", "course_name": "Digital Electronics",      "semester": 3},
+  {"name": "Kavya Nair",      "reg_no": "2026CSE003", "course_code": "CS301", "course_name": "Data Structures",          "semester": 3},
+  {"name": "Kavya Nair",      "reg_no": "2026CSE003", "course_code": "CS303", "course_name": "Computer Networks",        "semester": 3},
+  {"name": "Arjun Patel",     "reg_no": "2026MECH04", "course_code": "ME301", "course_name": "Thermodynamics",           "semester": 3},
+  {"name": "Arjun Patel",     "reg_no": "2026MECH04", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1},
+  {"name": "Divya Menon",     "reg_no": "2026ECE014", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1},
+  {"name": "Divya Menon",     "reg_no": "2026ECE014", "course_code": "EC301", "course_name": "Signals and Systems",       "semester": 3},
+  {"name": "Kiran Reddy",     "reg_no": "2026CSE004", "course_code": "CS302", "course_name": "Operating Systems",        "semester": 3},
+  {"name": "Kiran Reddy",     "reg_no": "2026CSE004", "course_code": "CS201", "course_name": "Database Management",      "semester": 2},
+  {"name": "Anitha Krishnan", "reg_no": "2026MECH05", "course_code": "ME302", "course_name": "Fluid Mechanics",          "semester": 3},
+  {"name": "Anitha Krishnan", "reg_no": "2026MECH05", "course_code": "MA101", "course_name": "Engineering Mathematics-I", "semester": 1}
+]

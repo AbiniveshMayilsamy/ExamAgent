@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import SDIHeroLanding from '../components/SDIHeroLanding'
 
 const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
 const AGENT_META = {
@@ -22,6 +24,7 @@ const STATUS_BADGE = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const [viewMode, setViewMode] = useState('hero') // 'hero' (SDI Presence look) or 'operational'
   const { agents, pipelineStatus, stats, schedule, deptRollRanges } = usePipelineContext()
 
   const doneAgents = agents.filter(a => a.status === 'done').length
@@ -41,10 +44,49 @@ export default function DashboardPage() {
     manual_review: { cls: 'alert alert-warning',  text: 'Some conflicts could not be auto-resolved. Manual review is required on the Timetable page.' },
   }[pipelineStatus]
 
+  if (viewMode === 'hero') {
+    return (
+      <div>
+        <div style={{
+          background: '#020813',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          padding: '8px 24px',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#65acff', letterSpacing: 1 }}>
+              VIEW MODE:
+            </span>
+            <button className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('hero')}>
+              SDI Presence Hero View
+            </button>
+            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('operational')}>
+              Operational Dashboard View
+            </button>
+          </div>
+          <button className="sdi-btn-gradient" style={{ padding: '6px 16px', fontSize: 12 }} onClick={() => navigate('/schedule')}>
+            + New Schedule
+          </button>
+        </div>
+        <SDIHeroLanding onSwitchToDashboard={() => setViewMode('operational')} />
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="page-header">
         <div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('hero')}>
+              ← SDI Hero Landing
+            </button>
+            <button className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }}>
+              Operational Dashboard
+            </button>
+          </div>
           <h1>Dashboard</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>Overview of your exam scheduling pipeline</p>
         </div>
@@ -52,6 +94,8 @@ export default function DashboardPage() {
           + New Schedule
         </button>
       </div>
+
+
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 

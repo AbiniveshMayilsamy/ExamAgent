@@ -417,3 +417,428 @@ p  { color: #475569; line-height: 1.6; }
   border-bottom: 4px solid transparent;
 }
 .pipeline-connector.active::after { border-left-color: #1d4ed8; }
+
+/* ── SDI Presence Theme & Hero Landing Styles ───────────────────────────────── */
+:root {
+  --sdi-bg-dark: #020813;
+  --sdi-bg-navy: #091322;
+  --sdi-bg-card: #0d1b2e;
+  --sdi-bg-card-hover: #12243e;
+  --sdi-border: rgba(255, 255, 255, 0.08);
+  --sdi-border-glow: rgba(56, 102, 241, 0.4);
+  --sdi-blue-primary: #3866f1;
+  --sdi-blue-dark: #013b9a;
+  --sdi-blue-light: #65acff;
+  --sdi-cyan-glow: #38bdf8;
+  --sdi-text-white: #ffffff;
+  --sdi-text-muted: #94a3b8;
+}
+
+.sdi-wrapper {
+  background: var(--sdi-bg-dark);
+  color: var(--sdi-text-white);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: -28px -32px;
+  overflow-x: hidden;
+}
+
+.sdi-nav-header {
+  background: rgba(2, 8, 19, 0.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--sdi-border);
+  padding: 18px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.sdi-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.sdi-logo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #013b9a, #3866f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: #ffffff;
+  font-size: 18px;
+  box-shadow: 0 4px 20px rgba(56, 102, 241, 0.4);
+}
+
+.sdi-logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #ffffff;
+}
+
+.sdi-logo-sub {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--sdi-blue-light);
+  text-transform: uppercase;
+}
+
+.sdi-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  list-style: none;
+}
+
+.sdi-nav-link {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: color 0.2s;
+  cursor: pointer;
+}
+
+.sdi-nav-link:hover {
+  color: var(--sdi-blue-light);
+}
+
+/* SDI Presence Gradient Button */
+.sdi-btn-gradient {
+  background: linear-gradient(90deg, #013b9a 0%, #3866f1 50%, #65acff 100%);
+  background-size: 200% auto;
+  color: #ffffff !important;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 28px;
+  border-radius: 99px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: all 0.4s ease;
+  box-shadow: 0 4px 20px rgba(56, 102, 241, 0.35);
+}
+
+.sdi-btn-gradient:hover {
+  background-position: right center;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(56, 102, 241, 0.55);
+}
+
+.sdi-btn-outline {
+  background: rgba(13, 27, 46, 0.8);
+  border: 1.5px solid rgba(101, 172, 255, 0.4);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 28px;
+  border-radius: 99px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.sdi-btn-outline:hover {
+  border-color: var(--sdi-blue-light);
+  background: rgba(56, 102, 241, 0.15);
+  transform: translateY(-2px);
+}
+
+/* SDI Hero Section */
+.sdi-hero {
+  padding: 80px 48px 100px;
+  background: radial-gradient(circle at 70% 30%, rgba(56, 102, 241, 0.15) 0%, transparent 60%),
+              radial-gradient(circle at 10% 80%, rgba(1, 59, 154, 0.2) 0%, transparent 50%),
+              var(--sdi-bg-dark);
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 48px;
+  align-items: center;
+  border-bottom: 1px solid var(--sdi-border);
+}
+
+.sdi-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 99px;
+  background: rgba(56, 102, 241, 0.12);
+  border: 1px solid rgba(101, 172, 255, 0.3);
+  color: var(--sdi-blue-light);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+
+.sdi-hero-title {
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -1.2px;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+
+.sdi-gradient-text {
+  background: linear-gradient(270deg, #65acff, #3866f1 50%, #ffffff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sdi-hero-desc {
+  font-size: 17px;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin-bottom: 36px;
+  max-width: 620px;
+}
+
+.sdi-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Right Visual / Pipeline Card */
+.sdi-hero-card {
+  background: linear-gradient(145deg, rgba(13, 27, 46, 0.9), rgba(9, 19, 34, 0.95));
+  border: 1px solid rgba(101, 172, 255, 0.25);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.sdi-hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 150px; height: 150px;
+  background: radial-gradient(circle, rgba(56, 102, 241, 0.3), transparent 70%);
+  pointer-events: none;
+}
+
+.sdi-card-header-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+/* SDI Solutions / Agents Grid Section */
+.sdi-section {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--sdi-border);
+}
+
+.sdi-section-header {
+  text-align: center;
+  max-width: 720px;
+  margin: 0 auto 60px;
+}
+
+.sdi-section-tag {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--sdi-blue-light);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.sdi-section-title {
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+
+.sdi-section-desc {
+  font-size: 15px;
+  color: var(--sdi-text-muted);
+  line-height: 1.6;
+}
+
+.sdi-solutions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.sdi-solution-card {
+  background: var(--sdi-bg-card);
+  border: 1px solid var(--sdi-border);
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.35s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.sdi-solution-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #013b9a, #3866f1, #65acff);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.sdi-solution-card:hover {
+  background: var(--sdi-bg-card-hover);
+  border-color: var(--sdi-border-glow);
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 25px rgba(56, 102, 241, 0.2);
+}
+
+.sdi-solution-card:hover::after {
+  opacity: 1;
+}
+
+.sdi-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(56, 102, 241, 0.12);
+  border: 1px solid rgba(101, 172, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--sdi-blue-light);
+  margin-bottom: 20px;
+}
+
+.sdi-card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.sdi-card-body {
+  font-size: 14px;
+  color: var(--sdi-text-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.sdi-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sdi-blue-light);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.sdi-solution-card:hover .sdi-card-link {
+  color: #ffffff;
+}
+
+/* Impact Stats Counter Section */
+.sdi-stats-section {
+  background: linear-gradient(180deg, var(--sdi-bg-navy) 0%, var(--sdi-bg-dark) 100%);
+  padding: 64px 48px;
+  border-bottom: 1px solid var(--sdi-border);
+}
+
+.sdi-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.sdi-stat-item {
+  text-align: center;
+  padding: 24px;
+  border-right: 1px solid var(--sdi-border);
+}
+
+.sdi-stat-item:last-child {
+  border-right: none;
+}
+
+.sdi-stat-num {
+  font-size: 48px;
+  font-weight: 900;
+  background: linear-gradient(180deg, #ffffff 30%, #65acff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.sdi-stat-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.sdi-stat-sub {
+  font-size: 12px;
+  color: var(--sdi-text-muted);
+}
+
+/* Industry Breakdown Cards */
+.sdi-industry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.sdi-ind-card {
+  background: rgba(13, 27, 46, 0.6);
+  border: 1px solid var(--sdi-border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.sdi-ind-card:hover {
+  border-color: var(--sdi-blue-primary);
+  background: rgba(56, 102, 241, 0.1);
+}
+
+@media (max-width: 1024px) {
+  .sdi-hero { grid-template-columns: 1fr; }
+  .sdi-solutions-grid { grid-template-columns: 1fr 1fr; }
+  .sdi-stats-grid { grid-template-columns: 1fr 1fr; }
+  .sdi-industry-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  .sdi-solutions-grid { grid-template-columns: 1fr; }
+  .sdi-stats-grid { grid-template-columns: 1fr; }
+  .sdi-nav-links { display: none; }
+}
+

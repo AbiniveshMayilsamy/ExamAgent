@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
@@ -79,7 +80,17 @@ const STATUS_CONFIG = {
 
 export default function AgentPipelinePage() {
   const navigate = useNavigate()
-  const { agents } = usePipelineContext()
+  const { agents, pipelineStatus } = usePipelineContext()
+
+  // Auto-redirect to Timetable page when all agents finish running
+  useEffect(() => {
+    if (pipelineStatus === 'done' || pipelineStatus === 'manual_review') {
+      const timer = setTimeout(() => {
+        navigate('/timetable')
+      }, 1200)
+      return () => clearTimeout(timer)
+    }
+  }, [pipelineStatus, navigate])
 
   return (
     <div>
@@ -88,9 +99,40 @@ export default function AgentPipelinePage() {
           <h1>Agent Pipeline</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>7 AI agents work in sequence to build a conflict-free timetable</p>
         </div>
+        {(pipelineStatus === 'done' || pipelineStatus === 'manual_review') && (
+          <button className="btn btn-primary" onClick={() => navigate('/timetable')}>
+            📅 View Timetable Now
+          </button>
+        )}
       </div>
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        
+        {/* Completion Redirect Notification Banner */}
+        {(pipelineStatus === 'done' || pipelineStatus === 'manual_review') && (
+          <div style={{
+            background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 8,
+            padding: '14px 20px', color: '#166534', display: 'flex', alignItems: 'center',
+            justify: 'space-between', fontWeight: 700, fontSize: 14
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>✅</span>
+              <div>
+                <div>All AI Agents Completed Execution Successfully!</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#15803d' }}>
+                  Redirecting automatically to the Timetable Page...
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/timetable')}
+              className="btn btn-primary"
+              style={{ background: '#15803d', padding: '6px 14px', fontSize: 12 }}
+            >
+              Go to Timetable ➔
+            </button>
+          </div>
+        )}
 
         {/* Pipeline flow diagram */}
         <div className="card">

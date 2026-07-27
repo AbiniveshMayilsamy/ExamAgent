@@ -7,6 +7,7 @@ const NAV = [
   { path: '/schedule',  label: 'New Schedule',   icon: '＋' },
   { path: '/agents',    label: 'Agent Pipeline', icon: '◈' },
   { path: '/timetable', label: 'Timetable',      icon: '▦' },
+  { path: '/students',  label: 'Hall Tickets',   icon: '🎟️' },
   { path: '/history',   label: 'Run History',    icon: '◷' },
   { path: '/settings',  label: 'Settings',       icon: '⚙' },
 ]

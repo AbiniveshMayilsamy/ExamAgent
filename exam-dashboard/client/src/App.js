@@ -9,6 +9,7 @@ import SchedulePage from './pages/SchedulePage'
 import AgentPipelinePage from './pages/AgentPipelinePage'
 import AgentDetailPage from './pages/AgentDetailPage'
 import TimetablePage from './pages/TimetablePage'
+import StudentsPage from './pages/StudentsPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 
@@ -26,6 +27,7 @@ function AppShell() {
           <Route path="/agents"     element={<AgentPipelinePage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/timetable"  element={<TimetablePage />} />
+          <Route path="/students"   element={<StudentsPage />} />
           <Route path="/history"    element={<HistoryPage />} />
           <Route path="/settings"   element={<SettingsPage />} />
         </Routes>

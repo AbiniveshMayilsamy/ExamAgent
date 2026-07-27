@@ -1,16 +1,15 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import SDIHeroLanding from '../components/SDIHeroLanding'
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
+const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
 const AGENT_META = {
   1: { name: 'Calendar Builder',     short: 'Calendar',  color: '#1d4ed8' },
   3: { name: 'Course Matcher',       short: 'Matcher',   color: '#7c3aed' },
   4: { name: 'Slot Harmonizer',      short: 'Harmonizer',color: '#0891b2' },
   5: { name: 'Gap Enforcer',         short: 'Spacing',   color: '#d97706' },
   6: { name: 'Arrear Packer',        short: 'Arrears',   color: '#059669' },
+  7: { name: 'Conflict Resolver',    short: 'Resolver',  color: '#8b5cf6' },
   2: { name: 'Conflict Checker',     short: 'Validator', color: '#dc2626' },
 }
 
@@ -24,13 +23,11 @@ const STATUS_BADGE = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState('hero') // 'hero' (SDI Presence look) or 'operational'
   const { agents, pipelineStatus, stats, schedule, deptRollRanges } = usePipelineContext()
 
   const doneAgents = agents.filter(a => a.status === 'done').length
-  const progress = Math.round((doneAgents / 6) * 100)
+  const progress = Math.round((doneAgents / 7) * 100)
 
-  // Chart data: exams per branch
   const branchData = Object.entries(deptRollRanges).map(([branch]) => ({
     branch,
     exams: schedule.filter(e => !e.is_arrear && (e.branches || []).includes(branch)).length,
@@ -44,16 +41,12 @@ export default function DashboardPage() {
     manual_review: { cls: 'alert alert-warning',  text: 'Some conflicts could not be auto-resolved. Manual review is required on the Timetable page.' },
   }[pipelineStatus]
 
-  if (viewMode === 'hero') {
-    return <SDIHeroLanding onSwitchToDashboard={() => setViewMode('operational')} />
-  }
-
   return (
     <div>
       <div className="page-header">
         <div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('hero')}>
+            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => navigate('/')}>
               ← SDI Hero Landing
             </button>
             <button className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }}>
@@ -68,16 +61,12 @@ export default function DashboardPage() {
         </button>
       </div>
 
-
-
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-        {/* Status banner */}
         {statusBanner && (
           <div className={statusBanner.cls}>{statusBanner.text}</div>
         )}
 
-        {/* Stat tiles */}
         <div className="grid-4">
           {[
             { label: 'Regular Exams',  value: stats.totalExams,     sub: 'Scheduled',       color: '#1d4ed8' },
@@ -94,7 +83,6 @@ export default function DashboardPage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          {/* Pipeline flow */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h3>Agent Pipeline</h3>
@@ -104,10 +92,9 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Progress */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{doneAgents} of 6 agents complete</span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>{doneAgents} of 7 agents complete</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>{progress}%</span>
               </div>
               <div className="progress-bar">
@@ -115,7 +102,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Agent flow */}
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
               {AGENT_ORDER.map((id, idx) => {
                 const agent = agents.find(a => a.agentId === id)
@@ -157,7 +143,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Branch chart */}
           <div className="card">
             <h3 style={{ marginBottom: 16 }}>Exams by Department</h3>
             {branchData.length === 0 ? (
@@ -185,7 +170,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick actions */}
         <div className="card">
           <h3 style={{ marginBottom: 14 }}>Quick Actions</h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -204,7 +188,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent run summary */}
         {schedule.length > 0 && (
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>

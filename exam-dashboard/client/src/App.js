@@ -1,8 +1,9 @@
 import './index.css'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route } from 'react-router-dom'
 import { SocketProvider } from './context/SocketContext'
 import { PipelineProvider, usePipelineContext } from './context/PipelineContext'
 import Sidebar from './components/Sidebar'
+import SDIHeroLanding from './components/SDIHeroLanding'
 import DashboardPage from './pages/DashboardPage'
 import SchedulePage from './pages/SchedulePage'
 import AgentPipelinePage from './pages/AgentPipelinePage'
@@ -20,7 +21,7 @@ function AppShell() {
       <Sidebar pipelineStatus={pipelineStatus} awaitingCount={awaitingCount} />
       <main className="main-content">
         <Routes>
-          <Route path="/"           element={<DashboardPage />} />
+          <Route path="/dashboard"  element={<DashboardPage />} />
           <Route path="/schedule"   element={<SchedulePage />} />
           <Route path="/agents"     element={<AgentPipelinePage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
@@ -37,9 +38,12 @@ export default function App() {
   return (
     <SocketProvider>
       <PipelineProvider>
-        <BrowserRouter>
-          <AppShell />
-        </BrowserRouter>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<SDIHeroLanding />} />
+            <Route path="/*" element={<AppShell />} />
+          </Routes>
+        </HashRouter>
       </PipelineProvider>
     </SocketProvider>
   )

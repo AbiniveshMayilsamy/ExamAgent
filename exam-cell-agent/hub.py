@@ -9,6 +9,7 @@ from agent3_matcher import build_course_clusters
 from agent4_harmonizer import assign_regular_slots
 from agent5_spacing import apply_spacing_rules
 from agent6_arrear import schedule_arrears
+from agent7_resolver import resolve_conflicts, suggest_manual_resolutions
 from agent2_conflict import check_conflicts
 
 MAX_RETRIES = 15
@@ -75,7 +76,7 @@ def run_pipeline(
 
     # ── Agent 6 ──────────────────────────────────────────────────────────────
     arrear_enrolments = [r for r in enrolments if r.get("is_arrear")]
-    complete, stats6 = schedule_arrears(spaced, enrolments, open_slots, year_session_pattern)
+    complete, stats6 = schedule_arrears(spaced, arrear_enrolments, open_slots, year_session_pattern)
     audit_log.append(f"Agent 6: {stats6['arrear_slots_assigned']} arrear slots for {stats6['arrear_students']} students.")
     complete = maybe_override(6, complete, stats6)
 
@@ -94,6 +95,56 @@ def run_pipeline(
                 "agent_stats": agent_stats,
                 "dept_roll_ranges": dept_roll_ranges,
             }
+        
+        # If retries exhausted, call Agent 7
+        if attempt == MAX_RETRIES:
+            audit_log.append(f"Agent 2: Max retries reached. Calling Agent 7 for cumulative resolution...")
+            
+            # Convert Agent 2 conflict format to Agent 7 expected format
+            agent7_conflicts = [
+                {
+                    "reg_no": c.get("reg_no", ""),
+                    "course1": c.get("course_a", c.get("course1", "")),
+                    "course2": c.get("course_b", c.get("course2", "")),
+                    "date": c.get("date", ""),
+                    "session": c.get("session", "")
+                }
+                for c in result["conflicts"]
+            ]
+            result7 = resolve_conflicts(schedule, enrolments, agent7_conflicts, open_slots)
+            agent_stats[7] = {
+                "resolved": result7["resolved"],
+                "unresolved": result7["unresolved"]
+            }
+            schedule = result7["schedule"]
+            audit_log.extend(result7["resolution_log"])
+            
+            # Verify after Agent 7
+            final_check = check_conflicts(schedule, enrolments)
+            if final_check["status"] == "PASS":
+                audit_log.append("Agent 7: ✅ All conflicts resolved!")
+                return {
+                    "schedule": schedule,
+                    "audit_log": audit_log,
+                    "status": "PASS",
+                    "conflicts": [],
+                    "agent_stats": agent_stats,
+                    "dept_roll_ranges": dept_roll_ranges,
+                }
+            
+            # If still unresolved, provide manual suggestions
+            suggestions = suggest_manual_resolutions(final_check["conflicts"], enrolments)
+            audit_log.append(f"Agent 7: ⚠️ {result7['unresolved']} conflicts remain. Manual review required.")
+            return {
+                "schedule": schedule,
+                "audit_log": audit_log,
+                "status": "MANUAL_REVIEW_REQUIRED",
+                "conflicts": final_check.get("conflicts", []),
+                "manual_suggestions": suggestions,
+                "agent_stats": agent_stats,
+                "dept_roll_ranges": dept_roll_ranges,
+            }
+        
         conflict = result["conflicts"][0]
         audit_log.append(
             f"Agent 2 attempt {attempt}: {conflict['reg_no']} — "
@@ -102,7 +153,7 @@ def run_pipeline(
         # Re-run spacing + arrear to fix
         reg = [e for e in schedule if not e.get("is_arrear")]
         reg, _ = apply_spacing_rules(reg, difficulty_map)
-        schedule, _ = schedule_arrears(reg, enrolments, open_slots, year_session_pattern)
+        schedule, _ = schedule_arrears(reg, arrear_enrolments, open_slots, year_session_pattern)
 
     final = check_conflicts(schedule, enrolments)
     audit_log.append(f"⚠️ Exceeded {MAX_RETRIES} retries. Manual review required.")

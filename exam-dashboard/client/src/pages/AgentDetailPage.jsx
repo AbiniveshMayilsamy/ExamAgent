@@ -88,6 +88,19 @@ const AGENT_DETAIL = {
     color: '#dc2626',
     statLabels: { students_checked: 'Students Checked', conflicts_found: 'Conflicts Found', clean_students: 'Clean Students' },
   },
+  7: {
+    name: 'Cumulative Conflict Resolver',
+    functionType: 'Conflict Resolution Expert',
+    description: 'When multiple conflicts persist after Agent 2 retries, Agent 7 analyzes ALL conflicts holistically. It moves courses to free slots or swaps FN/AN sessions to resolve multiple clashes at once. This is the final safety net before requiring manual review.',
+    rules: [
+      { rule: 'Rule 2 Extended', text: 'Resolves multiple conflicting exams that individual agent retries could not fix' },
+      { rule: 'Rule 7 Extended', text: 'Finds alternative slots for backlog exams without creating new conflicts' },
+    ],
+    inputs: ['Conflict list from Agent 2', 'Full schedule', 'Available slot list'],
+    outputs: ['Resolved schedule with conflicts minimized', 'Manual suggestions for remaining conflicts'],
+    color: '#8b5cf6',
+    statLabels: { resolved: 'Conflicts Resolved', unresolved: 'Unresolved', resolution_attempts: 'Attempts Made' },
+  },
 }
 
 const STATUS_CONFIG = {

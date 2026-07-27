@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
+const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
 
 const AGENT_DETAIL = {
   1: {
@@ -58,6 +58,15 @@ const AGENT_DETAIL = {
     inputs: 'Complete schedule, All enrolment data',
     outputs: 'PASS or FAIL with conflict list',
   },
+  7: {
+    name: 'Cumulative Conflict Resolver',
+    functionType: 'Conflict Resolution Expert',
+    description: 'When multiple conflicts persist after Agent 2 retries, Agent 7 analyzes ALL conflicts holistically. Moves courses to free slots or swaps FN/AN sessions to resolve multiple clashes at once.',
+    rules: ['Rule 2 Extended — Resolves multiple conflicting exams', 'Rule 7 Extended — Finds alternative slots for arrears without new conflicts'],
+    color: '#8b5cf6',
+    inputs: 'Conflict list, Full schedule, Available slot list',
+    outputs: 'Resolved schedule with minimized conflicts, Manual suggestions for remaining',
+  },
 }
 
 const STATUS_CONFIG = {
@@ -77,7 +86,7 @@ export default function AgentPipelinePage() {
       <div className="page-header">
         <div>
           <h1>Agent Pipeline</h1>
-          <p style={{ fontSize: 13, marginTop: 2 }}>6 AI agents work in sequence to build a conflict-free timetable</p>
+          <p style={{ fontSize: 13, marginTop: 2 }}>7 AI agents work in sequence to build a conflict-free timetable</p>
         </div>
       </div>
 

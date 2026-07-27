@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSocket } from '../context/SocketContext'
 
 const NAV = [
-  { path: '/',          label: 'Dashboard',      icon: '⊞' },
+  { path: '/dashboard', label: 'Dashboard',      icon: '⊞' },
   { path: '/schedule',  label: 'New Schedule',   icon: '＋' },
   { path: '/agents',    label: 'Agent Pipeline', icon: '◈' },
   { path: '/timetable', label: 'Timetable',      icon: '▦' },
@@ -73,7 +73,7 @@ export default function Sidebar({ pipelineStatus, awaitingCount }) {
           Navigation
         </div>
         {NAV.map(({ path, label, icon }) => {
-          const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
+          const isActive = location.pathname.startsWith(path)
           return (
             <NavLink key={path} to={path} style={{ textDecoration: 'none' }}>
               <div style={{

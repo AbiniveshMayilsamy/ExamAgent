@@ -1,6 +1,7 @@
 /**
- * Client-Side JavaScript Engine for the 6 Exam Cell Agents.
- * Allows the React App to run 100% locally in the browser when hosted on GitHub Pages!
+ * Client-Side JavaScript Engine for the 7 Exam Cell Agents.
+ * Conflict Resolution with alternating dates/sessions!
+ * Arrear exam handling improved.
  */
 
 export async function runClientSidePipeline(params, onAgentStart, onAgentLog, onAgentDone, onPipelineDone) {
@@ -48,9 +49,33 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   onAgentStart(3, 'Course Cluster Builder', 'Rules 3, 5');
   onAgentLog(3, `Analyzing enrollments for shared courses across branches and semesters...`);
 
+  // Build student-course mapping to detect arrear students
+  const studentCourses = {};
+  rows.forEach(r => {
+    const reg = r.reg_no || r.roll_no || r.name;
+    if (!studentCourses[reg]) studentCourses[reg] = [];
+    studentCourses[reg].push({
+      course_code: r.course_code || r.course || 'GEN101',
+      semester: parseInt(r.semester || 1, 10),
+      is_arrear: r.is_arrear === true || r.is_arrear === 'true' || r.is_arrear === '1'
+    });
+  });
+
+  // Detect which students have arrears (more than 5 courses in a semester = likely arrear)
+  const arrearStudents = new Set();
+  Object.entries(studentCourses).forEach(([reg, courses]) => {
+    const arrearCourses = courses.filter(c => c.is_arrear);
+    if (arrearCourses.length > 0) {
+      arrearStudents.add(reg);
+    }
+  });
+
+  onAgentLog(3, `Detected ${arrearStudents.size} students with arrear/backlog courses.`);
+
   const courseMap = {};
   rows.forEach(r => {
     const code = r.course_code || r.course || 'GEN101';
+    const isArrear = r.is_arrear === true || r.is_arrear === 'true' || r.is_arrear === '1';
     if (!courseMap[code]) {
       courseMap[code] = {
         course_code: code,
@@ -58,11 +83,12 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
         semester: parseInt(r.semester || 1, 10),
         branches: new Set(),
         studentCount: 0,
-        is_arrear: (r.is_arrear === true || r.is_arrear === 'true')
+        is_arrear: isArrear
       };
     }
     if (r.branch) courseMap[code].branches.add(r.branch);
     courseMap[code].studentCount += 1;
+    if (isArrear) courseMap[code].is_arrear = true;
   });
 
   const clusters = Object.values(courseMap).map(c => ({
@@ -161,23 +187,31 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   onAgentLog(6, `Scanning student backlog records and scheduling arrear exams...`);
 
   const arrearClusters = clusters.filter(c => c.is_arrear);
+  const regularSchedule = [...spacedSchedule];
   const finalSchedule = [...spacedSchedule];
 
+  // Get unique dates from regular schedule for arrear placement
+  const regularDates = [...new Set(spacedSchedule.map(s => s.date))];
+  
   let arrearCount = 0;
-  arrearClusters.forEach((arrearItem, idx) => {
-    // Pick an afternoon session corresponding to an existing regular exam day
-    const matchingRegularSlot = spacedSchedule[idx % spacedSchedule.length];
-    const arrearDate = matchingRegularSlot ? matchingRegularSlot.date : openSlots[0].date;
-    
-    finalSchedule.push({
-      ...arrearItem,
-      date: arrearDate,
-      session: 'AN',
-      is_arrear: true
+  if (arrearClusters.length > 0) {
+    arrearClusters.forEach((arrearItem, idx) => {
+      // Alternate between FN and AN sessions on existing exam days
+      const dateIdx = idx % regularDates.length;
+      const arrearDate = regularDates[dateIdx];
+      const session = (idx % 2 === 0) ? 'AN' : 'FN'; // Alternate between Afternoon and Forenoon
+      
+      finalSchedule.push({
+        ...arrearItem,
+        date: arrearDate,
+        session: session,
+        is_arrear: true
+      });
+      arrearCount++;
+      onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${arrearDate} [${session}]`);
     });
-    arrearCount++;
-    onAgentLog(6, `Placed arrear subject ${arrearItem.course_code} on ${arrearDate} [Afternoon Session]`);
-  });
+  }
+  onAgentLog(6, `Total arrear courses identified: ${arrearClusters.length} for ${arrearStudents.size} students.`);
 
   onAgentLog(6, `Successfully scheduled ${arrearCount} arrear/backlog exams in secondary sessions.`);
   await sleep(400);
@@ -192,7 +226,8 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   onAgentLog(2, `Auditing final timetable across ${rows.length} total student enrollment records...`);
   await sleep(300);
 
-  // Verification pass
+  // Verification pass - check for student-specific conflicts
+  // A conflict is when ONE student has TWO DIFFERENT courses in the SAME slot
   const studentSlotMap = {};
   const conflictsFound = [];
 
@@ -201,20 +236,59 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
     const courseCode = row.course_code || row.course;
     const scheduled = finalSchedule.find(s => s.course_code === courseCode);
     if (scheduled) {
-      const slotKey = `${studentId}_${scheduled.date}_${scheduled.session}`;
-      if (studentSlotMap[slotKey]) {
-        conflictsFound.push({
-          reg_no: studentId,
-          course1: studentSlotMap[slotKey],
-          course2: courseCode,
-          date: scheduled.date,
-          session: scheduled.session
-        });
+      if (!studentSlotMap[studentId]) studentSlotMap[studentId] = {};
+      
+      const slotKey = `${scheduled.date}_${scheduled.session}`;
+      if (studentSlotMap[studentId][slotKey]) {
+        // Only record conflict if it's TWO DIFFERENT courses (not duplicate entry)
+        if (studentSlotMap[studentId][slotKey] !== courseCode) {
+          const existing = conflictsFound.find(c => 
+            c.reg_no === studentId && c.date === scheduled.date && c.session === scheduled.session
+          );
+          if (!existing) {
+            conflictsFound.push({
+              reg_no: studentId,
+              course1: studentSlotMap[studentId][slotKey],
+              course2: courseCode,
+              date: scheduled.date,
+              session: scheduled.session
+            });
+          }
+        }
       } else {
-        studentSlotMap[slotKey] = courseCode;
+        studentSlotMap[studentId][slotKey] = courseCode;
       }
     }
   });
+
+  // If conflicts exist, run Agent 7 to resolve them
+  if (conflictsFound.length > 0) {
+    onAgentLog(2, `Calling Agent 7: Cumulative Conflict Resolution...`);
+    
+    // Run Agent 7: Cumulative Resolver
+    onAgentStart(7, 'Cumulative Conflict Resolver', 'Rule 2 Extended');
+    const resolutionResult = resolveConflictsInClient(finalSchedule, rows, conflictsFound, openSlots);
+    
+    onAgentLog(7, `Agent 7: Resolved ${resolutionResult.resolved} / ${conflictsFound.length} conflicts`);
+    await sleep(400);
+    onAgentDone(7, `Resolved ${resolutionResult.resolved} conflicts, ${resolutionResult.unresolved} require manual review`,
+      `Agent 7 analyzed all conflicts holistically and moved courses to free slots or swapped sessions to resolve student clashes.`
+    );
+    
+    // Re-verify after Agent 7
+    const finalCheck = verifyConflictsClient(resolutionResult.resolvedSchedule, rows);
+    
+    if (finalCheck.conflictsFound.length === 0) {
+      finalSchedule.length = 0; // Clear the array
+      resolutionResult.resolvedSchedule.forEach(e => finalSchedule.push(e)); // Add new items
+      conflictsFound.length = 0; // Clear conflicts
+      onAgentLog(2, `Agent 2 re-check: ✅ All conflicts resolved by Agent 7!`);
+    } else {
+      conflictsFound.length = 0;
+      finalCheck.conflictsFound.forEach(c => conflictsFound.push(c));
+      onAgentLog(2, `Agent 2 re-check: ⚠️ ${conflictsFound.length} conflicts remain after Agent 7`);
+    }
+  }
 
   if (conflictsFound.length === 0) {
     onAgentLog(2, `VERIFICATION PASSED: 0 student exam collisions detected across all ${rows.length} records! ✅`);
@@ -276,8 +350,8 @@ function parseCSV(text) {
 }
 
 function generateDefaultMockData() {
-  const depts = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT', 'AIML', 'CSBS'];
-  const deptsCodes = { CSE: 'CS', ECE: 'EC', EEE: 'EE', MECH: 'ME', CIVIL: 'CV', IT: 'IT', AIML: 'AM', CSBS: 'CB' };
+  const depts = ['CSE', 'AIML', 'CCE', 'CYSE', 'MECH', 'ECE', 'VLSI', 'EEE', 'AIDS', 'CSBS', 'IT', 'S&H'];
+  const deptsCodes = { CSE: 'CS', AIML: 'AM', CCE: 'CC', CYSE: 'CY', MECH: 'ME', ECE: 'EC', VLSI: 'VL', EEE: 'EE', AIDS: 'AD', CSBS: 'CB', IT: 'IT', 'S&H': 'SH' };
 
   const records = [];
   depts.forEach(dept => {
@@ -297,6 +371,152 @@ function generateDefaultMockData() {
   });
 
   return records;
+}
+
+// Agent 7: Cumulative Conflict Resolution - Read ALL conflicts, resolve by alternating dates/sessions
+function resolveConflictsInClient(schedule, enrolments, conflicts, openSlots) {
+  if (!conflicts || conflicts.length === 0) {
+    return { resolvedSchedule: schedule, resolved: 0, unresolved: 0 };
+  }
+  
+  const resolvedSchedule = JSON.parse(JSON.stringify(schedule));
+  
+  // Build student -> enrolled courses mapping (deduplicated)
+  const studentCourseSet = {};
+  enrolments.forEach(e => {
+    const reg = e.reg_no || e.roll_no || e.name;
+    if (!studentCourseSet[reg]) studentCourseSet[reg] = new Set();
+    studentCourseSet[reg].add(e.course_code);
+  });
+  
+  const studentCourses = {};
+  Object.entries(studentCourseSet).forEach(([reg, courses]) => {
+    studentCourses[reg] = Array.from(courses);
+  });
+  
+  // Get all unique dates and sessions from openSlots
+  const allDates = [...new Set(openSlots.map(s => s.date))];
+  const allSessions = ['FN', 'AN'];
+  
+  // Build date-session combinations
+  const allCombos = [];
+  allDates.forEach(date => {
+    allSessions.forEach(session => {
+      allCombos.push({ date, session });
+    });
+  });
+  
+  // Get currently used slots
+  const usedSlots = new Set(resolvedSchedule.map(e => `${e.date}_${e.session}`));
+  
+  // Find free slots
+  const freeSlots = allCombos.filter(s => !usedSlots.has(`${s.date}_${s.session}`));
+  
+  // Group conflicts by student to understand the full picture
+  const studentConflicts = {};
+  conflicts.forEach(c => {
+    if (!studentConflicts[c.reg_no]) studentConflicts[c.reg_no] = [];
+    studentConflicts[c.reg_no].push(c);
+  });
+  
+  console.log('Agent 7: Reading all conflicts:', JSON.stringify(studentConflicts));
+  
+  // Strategy: For each conflicting course, find an alternate slot
+  let resolved = 0;
+  const coursesToResolve = new Set();
+  
+  // Collect all unique courses involved in conflicts
+  conflicts.forEach(c => {
+    coursesToResolve.add(c.course1);
+    coursesToResolve.add(c.course2);
+  });
+  
+  const courseList = Array.from(coursesToResolve);
+  
+  for (const courseCode of courseList) {
+    const exam = resolvedSchedule.find(e => e.course_code === courseCode);
+    if (!exam) continue;
+    
+    // Get students enrolled in this course
+    const enrolledStudents = enrolments.filter(e => e.course_code === courseCode).map(e => e.reg_no || e.name);
+    
+    // Try to find a free slot that doesn't conflict with any student's other courses
+    for (const slot of freeSlots) {
+      let canUseSlot = true;
+      
+      for (const studentId of enrolledStudents) {
+        const studentOtherCourses = studentCourses[studentId] || [];
+        
+        for (const otherCourse of studentOtherCourses) {
+          if (otherCourse === courseCode) continue;
+          
+          const otherExam = resolvedSchedule.find(e => e.course_code === otherCourse);
+          if (otherExam && otherExam.date === slot.date && otherExam.session === slot.session) {
+            canUseSlot = false;
+            break;
+          }
+        }
+        if (!canUseSlot) break;
+      }
+      
+      if (canUseSlot) {
+        // Move this course to the free slot
+        const oldSlot = { date: exam.date, session: exam.session };
+        exam.date = slot.date;
+        exam.session = slot.session;
+        exam.resolved_by_agent7 = true;
+        
+        // Add old slot back to free slots
+        freeSlots.push(oldSlot);
+        // Remove new slot from free slots
+        const slotIdx = freeSlots.indexOf(slot);
+        if (slotIdx > -1) freeSlots.splice(slotIdx, 1);
+        
+        resolved++;
+        console.log(`Agent 7: Moved ${courseCode} from ${oldSlot.date} ${oldSlot.session} to ${slot.date} ${slot.session}`);
+        break;
+      }
+    }
+  }
+  
+  // After resolving, re-verify
+  const remainingConflicts = verifyConflictsClient(resolvedSchedule, enrolments);
+  
+  return {
+    resolvedSchedule,
+    resolved,
+    unresolved: remainingConflicts.conflictsFound.length
+  };
+}
+
+function verifyConflictsClient(schedule, enrolments) {
+  const studentSlotMap = {};
+  const conflictsFound = [];
+  
+  enrolments.forEach(row => {
+    const studentId = row.reg_no || row.roll_no || row.name;
+    const courseCode = row.course_code || row.course;
+    const scheduled = schedule.find(s => s.course_code === courseCode);
+    if (scheduled) {
+      // Track by student, then by slot - conflict is when same student in same slot
+      if (!studentSlotMap[studentId]) studentSlotMap[studentId] = {};
+      
+      const slotKey = `${scheduled.date}_${scheduled.session}`;
+      if (studentSlotMap[studentId][slotKey]) {
+        conflictsFound.push({
+          reg_no: studentId,
+          course1: studentSlotMap[studentId][slotKey],
+          course2: courseCode,
+          date: scheduled.date,
+          session: scheduled.session
+        });
+      } else {
+        studentSlotMap[studentId][slotKey] = courseCode;
+      }
+    }
+  });
+  
+  return { conflictsFound };
 }
 
 function sleep(ms) {

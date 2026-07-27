@@ -4,10 +4,11 @@ import { usePipelineContext } from '../context/PipelineContext'
 
 export default function SDIHeroLanding({ onSwitchToDashboard }) {
   const navigate = useNavigate()
+  const goToDashboard = () => onSwitchToDashboard ? onSwitchToDashboard() : navigate('/dashboard')
   const { agents, pipelineStatus, stats } = usePipelineContext()
 
   const doneCount = agents.filter(a => a.status === 'done').length
-  const progressPercent = Math.round((doneCount / 6) * 100)
+  const progressPercent = Math.round((doneCount / 7) * 100)
 
   const solutions = [
     {
@@ -57,6 +58,14 @@ export default function SDIHeroLanding({ onSwitchToDashboard }) {
       desc: 'Schedules backlog re-appear courses without creating time conflicts with regular semester examination timetables.',
       icon: '🎓',
       link: '/agents/6'
+    },
+    {
+      id: 7,
+      tag: 'AGENT 07',
+      title: 'Cumulative Conflict Resolver',
+      desc: 'Resolves multiple conflicts that earlier agents could not fix. Uses holistic analysis to move courses to free slots or swap sessions.',
+      icon: '🔧',
+      link: '/agents/7'
     }
   ]
 
@@ -88,7 +97,7 @@ export default function SDIHeroLanding({ onSwitchToDashboard }) {
         </ul>
 
         <div style={{ display: 'flex', gap: 12 }}>
-          <button className="sdi-btn-outline" onClick={onSwitchToDashboard}>
+          <button className="sdi-btn-outline" onClick={goToDashboard}>
             Live Dashboard
           </button>
           <button className="sdi-btn-gradient" onClick={() => navigate('/schedule')}>
@@ -198,7 +207,7 @@ export default function SDIHeroLanding({ onSwitchToDashboard }) {
             <div className="sdi-stat-sub">Zero student overlap constraint enforcement</div>
           </div>
           <div className="sdi-stat-item">
-            <div className="sdi-stat-num">6</div>
+            <div className="sdi-stat-num">7</div>
             <div className="sdi-stat-label">Autonomous AI Agents</div>
             <div className="sdi-stat-sub">Collaborative rule-based architecture</div>
           </div>
@@ -279,7 +288,7 @@ export default function SDIHeroLanding({ onSwitchToDashboard }) {
             <button className="sdi-btn-gradient" onClick={() => navigate('/schedule')}>
               Launch AI Schedule Solver →
             </button>
-            <button className="sdi-btn-outline" onClick={onSwitchToDashboard}>
+            <button className="sdi-btn-outline" onClick={goToDashboard}>
               Open Analytics Dashboard
             </button>
           </div>

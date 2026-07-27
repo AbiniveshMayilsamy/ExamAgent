@@ -2,8 +2,21 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
-const DEPT_CODES = ['CS', 'IT', 'CB', 'AM', 'EC', 'EE', 'ME', 'CV']
-const DEPT_NAMES = { CS: 'Computer Science', IT: 'Information Technology', CB: 'Computer Science & Business Systems', AM: 'AI & Machine Learning', EC: 'Electronics & Communication', EE: 'Electrical & Electronics', ME: 'Mechanical Engineering', CV: 'Civil Engineering' }
+const DEPT_CODES = ['CSE', 'AIML', 'CCE', 'CYSE', 'MECH', 'ECE', 'VLSI', 'EEE', 'AIDS', 'CSBS', 'IT', 'S&H']
+const DEPT_NAMES = { 
+  CSE: 'Computer Science & Engineering', 
+  AIML: 'AI & Machine Learning', 
+  CCE: 'Computer & Communication Engineering', 
+  CYSE: 'Cybersecurity', 
+  MECH: 'Mechanical Engineering', 
+  ECE: 'Electronics & Communication Engineering', 
+  VLSI: 'VLSI Design & Technology', 
+  EEE: 'Electrical & Electronics Engineering', 
+  AIDS: 'AI & Data Science', 
+  CSBS: 'Computer Science & Business Systems', 
+  IT: 'Information Technology', 
+  'S&H': 'Science & Humanities'
+}
 const DIFFICULTY_OPTIONS = ['easy', 'medium', 'hard']
 const SESSION_OPTIONS = ['FN (9:30 AM – 12:30 PM)', 'AN (1:30 PM – 4:30 PM)']
 

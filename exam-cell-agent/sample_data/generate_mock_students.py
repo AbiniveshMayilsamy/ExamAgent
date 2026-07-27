@@ -28,13 +28,17 @@ YEAR = 24  # batch year prefix
 
 DEPARTMENTS = [
     {"name": "CSE",   "code": "CS", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "IT",    "code": "IT", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "CSBS",  "code": "CB", "semesters": [1,2,3,4,5,6,7,8]},
     {"name": "AIML",  "code": "AM", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "ECE",   "code": "EC", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "EEE",   "code": "EE", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "CCE",   "code": "CC", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "CYSE",  "code": "CY", "semesters": [1,2,3,4,5,6,7,8]},
     {"name": "MECH",  "code": "ME", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "CIVIL", "code": "CV", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "ECE",   "code": "EC", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "VLSI",  "code": "VL", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "EEE",   "code": "EE", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "AIDS",  "code": "AD", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "CSBS",  "code": "CB", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "IT",    "code": "IT", "semesters": [1,2,3,4,5,6,7,8]},
+    {"name": "S&H",   "code": "SH", "semesters": [1,2,3,4]},
 ]
 
 # Courses per department per semester

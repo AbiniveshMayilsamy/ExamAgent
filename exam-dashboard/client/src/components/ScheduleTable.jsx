@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PrintScheduleModal from './PrintScheduleModal'
 
 const SESSION_TIMINGS = { FN: '9:30 AM – 12:30 PM', AN: '1:30 PM – 4:30 PM' }
 
@@ -6,6 +7,7 @@ export default function ScheduleTable({ schedule, conflicts, deptRollRanges = {}
   const [filter, setFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')
   const [view, setView] = useState('table') // 'table' | 'dept'
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
 
   const allBranches = [...new Set(schedule.flatMap(e => e.branches || []))].sort()
 
@@ -97,6 +99,12 @@ export default function ScheduleTable({ schedule, conflicts, deptRollRanges = {}
 
   return (
     <div>
+      <PrintScheduleModal
+        schedule={schedule}
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+      />
+
       {/* Stats bar */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         {[
@@ -151,6 +159,26 @@ export default function ScheduleTable({ schedule, conflicts, deptRollRanges = {}
           <option value="all">All Branches</option>
           {allBranches.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
+
+        <button
+          onClick={() => setIsPrintModalOpen(true)}
+          style={{
+            marginLeft: 'auto',
+            background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: 6,
+            padding: '6px 14px',
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <span>🖨️</span> Print Schedule
+        </button>
       </div>
 
       {/* Content */}

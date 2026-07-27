@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useSocket } from '../context/SocketContext'
+import logoEshwar from '../assets/logo_eshwar.png'
 
 const NAV = [
   { path: '/dashboard', label: 'Dashboard',      icon: '⊞' },
@@ -27,15 +28,11 @@ export default function Sidebar({ pipelineStatus, awaitingCount }) {
       {/* Brand */}
       <div style={{ padding: '22px 20px 16px', borderBottom: '1.5px solid #e2e8f0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, background: '#1d4ed8', borderRadius: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, color: '#fff', fontWeight: 800, flexShrink: 0,
-          }}>E</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', lineHeight: 1.2 }}>Exam Cell</div>
-            <div style={{ fontSize: 11, color: '#64748b' }}>AI Scheduler</div>
-          </div>
+          <img
+            src={logoEshwar}
+            alt="Sri Eshwar Logo"
+            style={{ height: 36, maxWidth: 140, objectFit: 'contain' }}
+          />
         </div>
       </div>
 

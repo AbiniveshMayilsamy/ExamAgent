@@ -1,6 +1,8 @@
 const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { getDbReady } = require('../dbState')
+const memoryStore = require('../models/memoryStore')
 const Run = require('../models/Run')
 const { emitToRun } = require('../socket/handlers')
 
@@ -31,12 +33,17 @@ function initAgents() {
 // Map: runId -> python child process (for sending stdin signals)
 const activeProcesses = new Map()
 
+function getStore() {
+  return getDbReady() ? Run : memoryStore
+}
+
 async function triggerPipeline(req, res) {
+  const store = getStore()
   const { startDate, endDate } = req.body
-  const leaveDays       = JSON.parse(req.body.leaveDays       || '[]')
-  const difficultyMap   = JSON.parse(req.body.difficultyMap   || '{}')
+  const leaveDays = JSON.parse(req.body.leaveDays || '[]')
+  const difficultyMap = JSON.parse(req.body.difficultyMap || '{}')
   const yearSessionPattern = JSON.parse(req.body.yearSessionPattern || '{}')
-  const examsPerBranch  = JSON.parse(req.body.examsPerBranch  || '{}')
+  const examsPerBranch = JSON.parse(req.body.examsPerBranch || '{}')
   const humanIntervention = req.body.humanIntervention === 'true' || req.body.humanIntervention === true
   const file = req.file
 
@@ -44,7 +51,7 @@ async function triggerPipeline(req, res) {
     return res.status(400).json({ error: 'Missing file, startDate, or endDate' })
   }
 
-  const run = await Run.create({
+  const run = await store.create({
     inputFile: file.originalname,
     startDate, endDate, leaveDays, difficultyMap,
     yearSessionPattern, examsPerBranch, humanIntervention,
@@ -98,8 +105,9 @@ async function triggerPipeline(req, res) {
 
   py.on('close', async (code) => {
     activeProcesses.delete(run._id.toString())
+    const store = getStore()
     if (code !== 0) {
-      await Run.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
+      await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
       emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: `Python exited with code ${code}` })
     }
     fs.unlink(file.path, () => {})
@@ -118,79 +126,97 @@ async function resumeAgent(req, res) {
 }
 
 async function handleEvent(io, runId, evt, py) {
+  const store = getStore()
   emitToRun(io, runId, evt.event, evt)
+
+  const agentId = evt.agentId
+  const idx = AGENT_ORDER.indexOf(agentId)
+
+  // Memory store update helpers
+  const updateField = async (path, value) => {
+    if (!getDbReady()) {
+      const run = store.runs.get(`mem_${runId}`)
+      if (!run) return
+      const parts = path.split('.')
+      let obj = run
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!obj[parts[i]]) obj[parts[i]] = {}
+        obj = obj[parts[i]]
+      }
+      obj[parts[parts.length - 1]] = value
+      return
+    }
+    await Run.findByIdAndUpdate(runId, { $set: { [path]: value } })
+  }
+
+  const pushToField = async (path, value) => {
+    if (!getDbReady()) {
+      const run = store.runs.get(`mem_${runId}`)
+      if (!run) return
+      const parts = path.split('.')
+      let obj = run
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!obj[parts[i]]) obj[parts[i]] = []
+        obj = obj[parts[i]]
+      }
+      const field = parts[parts.length - 1]
+      if (!obj[field]) obj[field] = []
+      obj[field].push(value)
+      return
+    }
+    await Run.findByIdAndUpdate(runId, { $push: { [path]: value } })
+  }
 
   switch (evt.event) {
     case 'agent_start':
-      await Run.findByIdAndUpdate(runId, {
-        $set: {
-          [`agents.${agentIndex(evt.agentId)}.status`]: 'running',
-          [`agents.${agentIndex(evt.agentId)}.startedAt`]: new Date(),
-        },
-      })
+      await updateField(`agents.${idx}.status`, 'running')
+      await updateField(`agents.${idx}.startedAt`, new Date())
       break
 
     case 'agent_log':
-      await Run.findByIdAndUpdate(runId, {
-        $push: { [`agents.${agentIndex(evt.agentId)}.logs`]: evt.message },
-      })
+      await pushToField(`agents.${idx}.logs`, evt.message)
       break
 
     case 'agent_done':
-      await Run.findByIdAndUpdate(runId, {
-        $set: {
-          [`agents.${agentIndex(evt.agentId)}.status`]: 'done',
-          [`agents.${agentIndex(evt.agentId)}.summary`]: evt.summary,
-          [`agents.${agentIndex(evt.agentId)}.llmExplanation`]: evt.llmExplanation,
-          [`agents.${agentIndex(evt.agentId)}.stats`]: evt.stats || {},
-          [`agents.${agentIndex(evt.agentId)}.finishedAt`]: new Date(),
-        },
-      })
+      await updateField(`agents.${idx}.status`, 'done')
+      await updateField(`agents.${idx}.summary`, evt.summary)
+      await updateField(`agents.${idx}.llmExplanation`, evt.llmExplanation)
+      await updateField(`agents.${idx}.stats`, evt.stats || {})
+      await updateField(`agents.${idx}.finishedAt`, new Date())
       break
 
     case 'agent_awaiting_review':
-      await Run.findByIdAndUpdate(runId, {
-        $set: {
-          [`agents.${agentIndex(evt.agentId)}.status`]: 'awaiting_review',
-          [`agents.${agentIndex(evt.agentId)}.output`]: evt.output,
-          [`agents.${agentIndex(evt.agentId)}.stats`]: evt.stats || {},
-        },
-      })
+      await updateField(`agents.${idx}.status`, 'awaiting_review')
+      await updateField(`agents.${idx}.output`, evt.output)
+      await updateField(`agents.${idx}.stats`, evt.stats || {})
       break
 
     case 'agent_fail':
-      await Run.findByIdAndUpdate(runId, {
-        $set: { [`agents.${agentIndex(evt.agentId)}.status`]: 'failed' },
-      })
+      await updateField(`agents.${idx}.status`, 'failed')
       break
 
     case 'ai_suggestion':
-      await Run.findByIdAndUpdate(runId, { aiSuggestions: evt.text })
+      await updateField('aiSuggestions', evt.text)
       break
 
     case 'pipeline_done':
-      await Run.findByIdAndUpdate(runId, {
-        status: evt.status === 'PASS' ? 'done' : 'manual_review',
-        finishedAt: new Date(),
-        schedule: evt.schedule,
-        auditLog: evt.auditLog,
-        conflicts: evt.conflicts,
-        agentStats: evt.agentStats,
-        deptRollRanges: evt.deptRollRanges,
-        totalExams: evt.totalExams,
-        totalArrears: evt.totalArrears,
-        conflictsFound: (evt.conflicts || []).length,
-      })
+      await updateField('status', evt.status === 'PASS' ? 'done' : 'manual_review')
+      await updateField('finishedAt', new Date())
+      await updateField('schedule', evt.schedule)
+      await updateField('auditLog', evt.auditLog)
+      await updateField('conflicts', evt.conflicts)
+      await updateField('agentStats', evt.agentStats)
+      await updateField('deptRollRanges', evt.deptRollRanges)
+      await updateField('totalExams', evt.totalExams)
+      await updateField('totalArrears', evt.totalArrears)
+      await updateField('conflictsFound', (evt.conflicts || []).length)
       break
 
     case 'pipeline_fail':
-      await Run.findByIdAndUpdate(runId, { status: 'failed', finishedAt: new Date() })
+      await updateField('status', 'failed')
+      await updateField('finishedAt', new Date())
       break
   }
-}
-
-function agentIndex(agentId) {
-  return AGENT_ORDER.indexOf(agentId)
 }
 
 module.exports = { triggerPipeline, resumeAgent }

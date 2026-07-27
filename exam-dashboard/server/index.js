@@ -6,6 +6,9 @@ const cors = require('cors')
 const path = require('path')
 require('dotenv').config()
 
+const memoryStore = require('./models/memoryStore')
+const { getDbReady, setDbReady } = require('./dbState')
+
 const pipelineRoutes = require('./routes/pipeline')
 const runRoutes = require('./routes/runs')
 const settingsRoutes = require('./routes/settings')
@@ -79,14 +82,17 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('MongoDB connected')
+    setDbReady(true)
     server.listen(PORT, '0.0.0.0', () =>
       console.log(`Server running on port ${PORT}`)
     )
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err)
+    console.log('⚠️  Using in-memory storage (data will be lost on restart)')
+    setDbReady(false)
     server.listen(PORT, '0.0.0.0', () =>
-      console.log(`Server running on port ${PORT} (MongoDB fallback mode)`)
+      console.log(`Server running on port ${PORT} (in-memory mode)`)
     )
   })
 

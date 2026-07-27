@@ -245,8 +245,9 @@ def main():
 
     # ── Agent 6 ──────────────────────────────────────────────────────────────
     try:
+        arrear_enrolments = [r for r in enrolments if r.get("is_arrear")]
         complete, stats6 = run_agent(6, schedule_arrears,
-            spaced, enrolments, open_slots, year_session_pattern,
+            spaced, arrear_enrolments, open_slots, year_session_pattern, enrolments,
             human_intervention=hi)
         agent_stats[6] = stats6
         audit_log.append(_build_summary(6, stats6))
@@ -281,9 +282,10 @@ def main():
             emit({"event": "agent_log", "agentId": 2, "message": msg})
             final_conflicts = result["conflicts"]
             try:
-                reg = [e for e in schedule if not e.get("is_arrear")]
+                reg_clusters = [e for e in clusters]  # re-use clusters from agent3
+                reg, _ = assign_regular_slots(open_slots, reg_clusters, year_session_pattern, dept_roll_ranges)
                 reg, _ = apply_spacing_rules(reg, difficulty_map)
-                schedule, _ = schedule_arrears(reg, enrolments, open_slots, year_session_pattern)
+                schedule, _ = schedule_arrears(reg, arrear_enrolments, open_slots, year_session_pattern, enrolments)
             except Exception:
                 pass
     else:

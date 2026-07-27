@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePipelineContext } from '../context/PipelineContext'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import PrintScheduleModal from '../components/PrintScheduleModal'
 
 const SESSION_TIMINGS = { FN: '9:30 AM – 12:30 PM', AN: '1:30 PM – 4:30 PM' }
 
@@ -24,6 +25,7 @@ export default function TimetablePage() {
   const { schedule, conflicts, deptRollRanges, stats, agents } = usePipelineContext()
   const [expandedDay, setExpandedDay] = useState(null)
   const [viewMode, setViewMode] = useState('timeline') // 'timeline' or 'table'
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
 
   // Group exams by date
   const examsByDate = {}
@@ -87,9 +89,26 @@ export default function TimetablePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary" onClick={exportCSV}>Export CSV</button>
+          <button className="btn btn-secondary" onClick={exportCSV}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => setIsPrintModalOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+              <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/>
+            </svg>
+            Print Schedule
+          </button>
         </div>
       </div>
+
+      <PrintScheduleModal
+        schedule={schedule}
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+      />
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 

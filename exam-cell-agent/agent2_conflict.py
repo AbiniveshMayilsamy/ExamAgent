@@ -27,27 +27,26 @@ def check_conflicts(complete_schedule: list[dict], enrolments: list[dict]) -> di
         if entry.get("is_arrear", False) and entry["course_code"] not in course_slot:
             course_slot[entry["course_code"]] = (entry["date"], entry["session"])
 
-    student_exams: dict[str, list] = defaultdict(list)
+    # Build student -> all enrolled courses map from enrolments
+    student_courses: dict[str, set] = defaultdict(set)
     for row in enrolments:
-        code = row["course_code"]
-        if code in course_slot:
-            d, s = course_slot[code]
-            student_exams[row["reg_no"]].append((code, d, s))
+        student_courses[row["reg_no"]].add(row["course_code"])
 
+    # Check each student for conflicts
     conflicts = []
-    for reg_no, exams in student_exams.items():
-        seen_codes: dict[str, tuple] = {}
-        deduped = []
-        for code, d, s in exams:
-            if code not in seen_codes:
-                seen_codes[code] = (d, s)
-                deduped.append((code, d, s))
-
-        slot_map: dict[tuple, list] = defaultdict(list)
-        for code, d, s in deduped:
-            slot_map[(d, s)].append(code)
-
-        for (d, s), codes in slot_map.items():
+    for reg_no, course_set in student_courses.items():
+        if not course_set:
+            continue
+            
+        # Get slots for all courses this student is taking
+        student_slots: dict[tuple, list] = defaultdict(list)
+        for code in course_set:
+            if code in course_slot:
+                d, s = course_slot[code]
+                student_slots[(d, s)].append(code)
+        
+        # Find conflicts: any slot with >1 course
+        for (d, s), codes in student_slots.items():
             if len(codes) > 1:
                 for i in range(len(codes)):
                     for j in range(i + 1, len(codes)):
@@ -59,7 +58,7 @@ def check_conflicts(complete_schedule: list[dict], enrolments: list[dict]) -> di
                             "session": s,
                         })
 
-    total_students = len(student_exams)
+    total_students = len(student_courses)
     stats = {
         "students_checked": total_students,
         "conflicts_found": len(conflicts),

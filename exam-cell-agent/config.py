@@ -13,9 +13,9 @@ SESSION_TIMINGS = {
 # year (1-4) -> preferred session ("FN" | "AN" | None for no preference)
 DEFAULT_YEAR_SESSION_PATTERN = {
     1: "FN",   # 1st year → morning
-    2: "FN",   # 2nd year → morning
-    3: "FN",   # 3rd year → morning (next day from 2nd yr handled by spacing)
-    4: "AN",   # Final year → evening
+    2: "AN",   # 2nd year → afternoon
+    3: "FN",   # 3rd year → morning
+    4: "AN",   # Final year → afternoon
 }
 
 # Rule 3 — Schedule window defaults

@@ -75,8 +75,10 @@ def run_pipeline(
     spaced = maybe_override(5, spaced, stats5)
 
     # ── Agent 6 ──────────────────────────────────────────────────────────────
+    # Separate arrears from regular enrolments
     arrear_enrolments = [r for r in enrolments if r.get("is_arrear")]
-    complete, stats6 = schedule_arrears(spaced, arrear_enrolments, open_slots, year_session_pattern)
+    # Pass full enrolments so Agent 6 can track which sessions each student already has
+    complete, stats6 = schedule_arrears(spaced, arrear_enrolments, open_slots, year_session_pattern, enrolments)
     audit_log.append(f"Agent 6: {stats6['arrear_slots_assigned']} arrear slots for {stats6['arrear_students']} students.")
     complete = maybe_override(6, complete, stats6)
 
@@ -153,7 +155,7 @@ def run_pipeline(
         # Re-run spacing + arrear to fix
         reg = [e for e in schedule if not e.get("is_arrear")]
         reg, _ = apply_spacing_rules(reg, difficulty_map)
-        schedule, _ = schedule_arrears(reg, arrear_enrolments, open_slots, year_session_pattern)
+        schedule, _ = schedule_arrears(reg, arrear_enrolments, open_slots, year_session_pattern, enrolments)
 
     final = check_conflicts(schedule, enrolments)
     audit_log.append(f"⚠️ Exceeded {MAX_RETRIES} retries. Manual review required.")

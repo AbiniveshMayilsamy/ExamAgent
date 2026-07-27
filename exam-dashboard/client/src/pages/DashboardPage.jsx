@@ -45,34 +45,7 @@ export default function DashboardPage() {
   }[pipelineStatus]
 
   if (viewMode === 'hero') {
-    return (
-      <div>
-        <div style={{
-          background: '#020813',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          padding: '8px 24px',
-          display: 'flex',
-          justify: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#65acff', letterSpacing: 1 }}>
-              VIEW MODE:
-            </span>
-            <button className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('hero')}>
-              SDI Presence Hero View
-            </button>
-            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => setViewMode('operational')}>
-              Operational Dashboard View
-            </button>
-          </div>
-          <button className="sdi-btn-gradient" style={{ padding: '6px 16px', fontSize: 12 }} onClick={() => navigate('/schedule')}>
-            + New Schedule
-          </button>
-        </div>
-        <SDIHeroLanding onSwitchToDashboard={() => setViewMode('operational')} />
-      </div>
-    )
+    return <SDIHeroLanding onSwitchToDashboard={() => setViewMode('operational')} />
   }
 
   return (

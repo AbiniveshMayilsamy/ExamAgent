@@ -187,28 +187,97 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   onAgentLog(6, `Scanning student backlog records and scheduling arrear exams...`);
 
   const arrearClusters = clusters.filter(c => c.is_arrear);
-  const regularSchedule = [...spacedSchedule];
   const finalSchedule = [...spacedSchedule];
 
-  // Get unique dates from regular schedule for arrear placement
+  // Map student -> set of slot keys ('YYYY-MM-DD_FN' / 'YYYY-MM-DD_AN') they already have
+  const studentSlotMap = {};
+  rows.forEach(r => {
+    const reg = r.reg_no || r.roll_no || r.name;
+    const courseCode = r.course_code || r.course;
+    const scheduled = spacedSchedule.find(s => s.course_code === courseCode);
+    if (scheduled && !r.is_arrear) {
+      if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
+      studentSlotMap[reg].add(`${scheduled.date}_${scheduled.session}`);
+    }
+  });
+
   const regularDates = [...new Set(spacedSchedule.map(s => s.date))];
-  
   let arrearCount = 0;
+
   if (arrearClusters.length > 0) {
-    arrearClusters.forEach((arrearItem, idx) => {
-      // Alternate between FN and AN sessions on existing exam days
-      const dateIdx = idx % regularDates.length;
-      const arrearDate = regularDates[dateIdx];
-      const session = (idx % 2 === 0) ? 'AN' : 'FN'; // Alternate between Afternoon and Forenoon
-      
-      finalSchedule.push({
-        ...arrearItem,
-        date: arrearDate,
-        session: session,
-        is_arrear: true
-      });
-      arrearCount++;
-      onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${arrearDate} [${session}]`);
+    arrearClusters.forEach((arrearItem) => {
+      const enrolledStudents = rows.filter(r => (r.course_code || r.course) === arrearItem.course_code)
+                                   .map(r => r.reg_no || r.roll_no || r.name);
+
+      let assigned = false;
+
+      // Pass 1: Try opposite session on regular dates (Rule 7)
+      for (const regDate of regularDates) {
+        const regSessionsOnDate = spacedSchedule.filter(s => s.date === regDate).map(s => s.session);
+        const targetSessions = regSessionsOnDate.includes('FN') ? ['AN', 'FN'] : ['FN', 'AN'];
+
+        for (const sess of targetSessions) {
+          const slotKey = `${regDate}_${sess}`;
+
+          let clash = false;
+          for (const reg of enrolledStudents) {
+            if (studentSlotMap[reg] && studentSlotMap[reg].has(slotKey)) {
+              clash = true;
+              break;
+            }
+          }
+
+          if (!clash) {
+            finalSchedule.push({
+              ...arrearItem,
+              date: regDate,
+              session: sess,
+              is_arrear: true
+            });
+            enrolledStudents.forEach(reg => {
+              if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
+              studentSlotMap[reg].add(slotKey);
+            });
+            arrearCount++;
+            onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${regDate} [${sess}]`);
+            assigned = true;
+            break;
+          }
+        }
+        if (assigned) break;
+      }
+
+      // Pass 2: Try any open slot in openSlots
+      if (!assigned) {
+        for (const slot of openSlots) {
+          const slotKey = `${slot.date}_${slot.session}`;
+
+          let clash = false;
+          for (const reg of enrolledStudents) {
+            if (studentSlotMap[reg] && studentSlotMap[reg].has(slotKey)) {
+              clash = true;
+              break;
+            }
+          }
+
+          if (!clash) {
+            finalSchedule.push({
+              ...arrearItem,
+              date: slot.date,
+              session: slot.session,
+              is_arrear: true
+            });
+            enrolledStudents.forEach(reg => {
+              if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
+              studentSlotMap[reg].add(slotKey);
+            });
+            arrearCount++;
+            onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${slot.date} [${slot.session}]`);
+            assigned = true;
+            break;
+          }
+        }
+      }
     });
   }
   onAgentLog(6, `Total arrear courses identified: ${arrearClusters.length} for ${arrearStudents.size} students.`);

@@ -34,8 +34,9 @@ def assign_regular_slots(
         (draft, stats)
     """
     pattern = year_session_pattern or DEFAULT_YEAR_SESSION_PATTERN
-    used_slots: set[tuple] = set()          # (date, session) already taken
-    year_date_used: dict[int, set] = {}     # year -> set of dates used (for gap enforcement)
+    used_branch_slots: set[tuple] = set()    # (sem, branch, date, session) taken
+    used_slots: set[tuple] = set()           # (date, session) used globally
+    year_date_used: dict[int, set] = {}      # year -> set of dates used
 
     # Sort: shared first, then credits desc, then year asc
     sorted_clusters = sorted(
@@ -48,18 +49,34 @@ def assign_regular_slots(
 
     for cluster in sorted_clusters:
         year = cluster["year"]
+        sems = cluster.get("semesters", [min(cluster.get("semesters", [1]))])
         preferred_session = pattern.get(year)
 
         assigned = False
         # Two-pass: preferred session first, then any free slot
         for prefer_only in (True, False):
             for slot in open_slots:
-                slot_key = (slot["date"], slot["session"])
-                if slot_key in used_slots:
+                # Check branch-level conflict
+                clash = False
+                for sem in sems:
+                    for b in cluster["branches"]:
+                        if (sem, b, slot["date"], slot["session"]) in used_branch_slots:
+                            clash = True
+                            break
+                    if clash:
+                        break
+                if clash:
                     continue
+
                 if prefer_only and preferred_session and slot["session"] != preferred_session:
                     continue
 
+                # Mark branch slots as used
+                for sem in sems:
+                    for b in cluster["branches"]:
+                        used_branch_slots.add((sem, b, slot["date"], slot["session"]))
+
+                slot_key = (slot["date"], slot["session"])
                 used_slots.add(slot_key)
                 if year not in year_date_used:
                     year_date_used[year] = set()

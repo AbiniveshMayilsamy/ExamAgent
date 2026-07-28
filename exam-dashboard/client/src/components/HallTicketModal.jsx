@@ -193,7 +193,7 @@ export default function HallTicketModal({ student, students = [], getStudentExam
                       <tr>
                         <td style={{ padding: '3px 0', fontWeight: 'bold' }}>Candidate Name:</td>
                         <td style={{ padding: '3px 0', fontWeight: 'bold', fontSize: '13px' }}>
-                          {std.name}
+                          {std.name && !std.name.startsWith('Student 7228') && !std.name.startsWith('Student 202') ? std.name : '-'}
                         </td>
                       </tr>
                       <tr>

@@ -95,29 +95,26 @@ def schedule_arrears(
             if arrear_per_day[reg_date] >= ARREAR_MAX_PER_DAY:
                 continue
 
-            # Get all sessions already used on this date by any of these students
-            sessions_used_by_students = set()
-            for rn in reg_nos:
-                for (d, s) in student_regular_slots.get(rn, set()):
-                    if d == reg_date:
-                        sessions_used_by_students.add(s)
+            # Determine opposite session of regular exam on this date
+            reg_sessions = {e["session"] for e in schedule if not e.get("is_arrear", False) and e["date"] == reg_date}
+            target_sessions = []
+            if "FN" in reg_sessions and "AN" not in reg_sessions:
+                target_sessions = ["AN", "FN"]
+            elif "AN" in reg_sessions and "FN" not in reg_sessions:
+                target_sessions = ["FN", "AN"]
+            else:
+                target_sessions = [preferred_session, "AN", "FN"] if preferred_session else ["AN", "FN"]
 
-            # Try preferred session first, then any available that doesn't conflict
-            sessions_to_try = []
-            if preferred_session and (reg_date, preferred_session) not in used_slots:
-                sessions_to_try.append(preferred_session)
-            for sess in ("FN", "AN"):
-                if sess not in sessions_to_try and (reg_date, sess) not in used_slots and sess not in sessions_used_by_students:
-                    sessions_to_try.append(sess)
-
-            for target_session in sessions_to_try:
+            for target_session in target_sessions:
+                if not target_session:
+                    continue
                 slot_key = (reg_date, target_session)
                 
                 # Don't use same slot as regular version of this course
                 if regular_course_slot == slot_key:
                     continue
                 
-                # CRITICAL: Don't clash with any student's existing regular exam
+                # CRITICAL: Don't clash with any student's existing regular or arrear exam
                 clash = False
                 for rn in reg_nos:
                     if slot_key in student_regular_slots[rn]:
@@ -142,8 +139,6 @@ def schedule_arrears(
                 d, sess = slot["date"], slot["session"]
                 slot_key = (d, sess)
                 
-                if slot_key in used_slots:
-                    continue
                 if arrear_per_day[d] >= ARREAR_MAX_PER_DAY:
                     continue
                 if regular_course_slot == slot_key:

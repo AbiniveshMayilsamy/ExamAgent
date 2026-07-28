@@ -39,22 +39,33 @@ function getStore() {
 
 async function triggerPipeline(req, res) {
   const store = getStore()
-  const { startDate, endDate } = req.body
+  const semType = req.body.semType || 'odd'
+  const startDates = req.body.startDates || '{}'
   const leaveDays = JSON.parse(req.body.leaveDays || '[]')
-  const difficultyMap = JSON.parse(req.body.difficultyMap || '{}')
-  const yearSessionPattern = JSON.parse(req.body.yearSessionPattern || '{}')
-  const examsPerBranch = JSON.parse(req.body.examsPerBranch || '{}')
+  const useGroqAI = req.body.useGroqAI === 'true' || req.body.useGroqAI === true
   const humanIntervention = req.body.humanIntervention === 'true' || req.body.humanIntervention === true
-  const file = req.file
-
-  if (!file || !startDate || !endDate) {
-    return res.status(400).json({ error: 'Missing file, startDate, or endDate' })
+  
+  const files = req.files || []
+  if (files.length === 0) {
+    return res.status(400).json({ error: 'Please upload at least one exam file.' })
   }
 
+  // Organize uploaded files by field name
+  const uploadedFilesMap = {}
+  files.forEach(f => {
+    uploadedFilesMap[f.fieldname] = f.path
+  })
+
+  const primaryFileName = files[0].originalname
+
   const run = await store.create({
-    inputFile: file.originalname,
-    startDate, endDate, leaveDays, difficultyMap,
-    yearSessionPattern, examsPerBranch, humanIntervention,
+    inputFile: primaryFileName,
+    startDate: startDates,
+    endDate: 'Auto-calculated',
+    leaveDays,
+    semType,
+    useGroqAI,
+    humanIntervention,
     agents: initAgents(),
     status: 'running',
   })
@@ -66,18 +77,21 @@ async function triggerPipeline(req, res) {
 
   const pyArgs = [
     bridgePath,
-    '--csv', file.path,
-    '--start', startDate,
-    '--end', endDate,
+    '--sem-type', semType,
+    '--start-dates', typeof startDates === 'string' ? startDates : JSON.stringify(startDates),
     '--leaves', JSON.stringify(leaveDays),
-    '--difficulty', JSON.stringify(difficultyMap),
-    '--year-session-pattern', JSON.stringify(yearSessionPattern),
-    '--exams-per-branch', JSON.stringify(examsPerBranch),
   ]
+
+  if (uploadedFilesMap.year_1) pyArgs.push('--year-1', uploadedFilesMap.year_1)
+  if (uploadedFilesMap.year_2) pyArgs.push('--year-2', uploadedFilesMap.year_2)
+  if (uploadedFilesMap.year_3) pyArgs.push('--year-3', uploadedFilesMap.year_3)
+  if (uploadedFilesMap.year_4) pyArgs.push('--year-4', uploadedFilesMap.year_4)
+  if (uploadedFilesMap.arrear_file) pyArgs.push('--arrear-file', uploadedFilesMap.arrear_file)
+  if (useGroqAI) pyArgs.push('--use-groq-ai')
   if (humanIntervention) pyArgs.push('--human-intervention')
 
   const py = spawn(
-    process.env.PYTHON_PATH || 'python3',
+    process.env.PYTHON_PATH || 'python',
     pyArgs,
     {
       env: { ...process.env, AGENTS_PATH: agentsPath,
@@ -110,7 +124,8 @@ async function triggerPipeline(req, res) {
       await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
       emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: `Python exited with code ${code}` })
     }
-    fs.unlink(file.path, () => {})
+    // Clean up temp files
+    files.forEach(f => fs.unlink(f.path, () => {}))
   })
 }
 
@@ -149,74 +164,39 @@ async function handleEvent(io, runId, evt, py) {
     await Run.findByIdAndUpdate(runId, { $set: { [path]: value } })
   }
 
-  const pushToField = async (path, value) => {
+  if (evt.event === 'agent_start') {
+    await updateField(`agents.${idx}.status`, 'running')
+  } else if (evt.event === 'agent_log') {
     if (!getDbReady()) {
       const run = store.runs.get(`mem_${runId}`)
-      if (!run) return
-      const parts = path.split('.')
-      let obj = run
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!obj[parts[i]]) obj[parts[i]] = []
-        obj = obj[parts[i]]
-      }
-      const field = parts[parts.length - 1]
-      if (!obj[field]) obj[field] = []
-      obj[field].push(value)
-      return
+      if (run && run.agents[idx]) run.agents[idx].logs.push(evt.message)
+    } else {
+      await Run.findByIdAndUpdate(runId, { $push: { [`agents.${idx}.logs`]: evt.message } })
     }
-    await Run.findByIdAndUpdate(runId, { $push: { [path]: value } })
-  }
-
-  switch (evt.event) {
-    case 'agent_start':
-      await updateField(`agents.${idx}.status`, 'running')
-      await updateField(`agents.${idx}.startedAt`, new Date())
-      break
-
-    case 'agent_log':
-      await pushToField(`agents.${idx}.logs`, evt.message)
-      break
-
-    case 'agent_done':
-      await updateField(`agents.${idx}.status`, 'done')
-      await updateField(`agents.${idx}.summary`, evt.summary)
-      await updateField(`agents.${idx}.llmExplanation`, evt.llmExplanation)
-      await updateField(`agents.${idx}.stats`, evt.stats || {})
-      await updateField(`agents.${idx}.finishedAt`, new Date())
-      break
-
-    case 'agent_awaiting_review':
-      await updateField(`agents.${idx}.status`, 'awaiting_review')
-      await updateField(`agents.${idx}.output`, evt.output)
-      await updateField(`agents.${idx}.stats`, evt.stats || {})
-      break
-
-    case 'agent_fail':
-      await updateField(`agents.${idx}.status`, 'failed')
-      break
-
-    case 'ai_suggestion':
-      await updateField('aiSuggestions', evt.text)
-      break
-
-    case 'pipeline_done':
-      await updateField('status', evt.status === 'PASS' ? 'done' : 'manual_review')
-      await updateField('finishedAt', new Date())
-      await updateField('schedule', evt.schedule)
-      await updateField('auditLog', evt.auditLog)
-      await updateField('conflicts', evt.conflicts)
-      await updateField('agentStats', evt.agentStats)
-      await updateField('deptRollRanges', evt.deptRollRanges)
-      await updateField('totalExams', evt.totalExams)
-      await updateField('totalArrears', evt.totalArrears)
-      await updateField('conflictsFound', (evt.conflicts || []).length)
-      break
-
-    case 'pipeline_fail':
-      await updateField('status', 'failed')
-      await updateField('finishedAt', new Date())
-      break
+  } else if (evt.event === 'agent_done') {
+    await updateField(`agents.${idx}.status`, 'done')
+    await updateField(`agents.${idx}.summary`, evt.summary)
+    await updateField(`agents.${idx}.llmExplanation`, evt.llmExplanation)
+    await updateField(`agents.${idx}.stats`, evt.stats)
+    await updateField(`agents.${idx}.output`, evt.output)
+  } else if (evt.event === 'agent_awaiting_review') {
+    await updateField(`agents.${idx}.status`, 'awaiting_review')
+    await updateField(`agents.${idx}.output`, evt.output)
+  } else if (evt.event === 'pipeline_done') {
+    await updateField('status', 'completed')
+    await updateField('schedule', evt.schedule)
+    await updateField('auditLog', evt.auditLog)
+    await updateField('conflicts', evt.conflicts)
+    await updateField('agentStats', evt.agentStats)
+    await updateField('deptRollRanges', evt.deptRollRanges)
+    await updateField('finishedAt', new Date())
+  } else if (evt.event === 'pipeline_fail') {
+    await updateField('status', 'failed')
+    await updateField('finishedAt', new Date())
   }
 }
 
-module.exports = { triggerPipeline, resumeAgent }
+module.exports = {
+  triggerPipeline,
+  resumeAgent,
+}

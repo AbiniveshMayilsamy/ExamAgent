@@ -59,102 +59,29 @@ def resolve_conflicts(schedule, enrolments, conflicts, open_slots):
     used_slots = set(course_slot.values())
     free_slots = [s for s in all_combos if s not in used_slots]
     
-    resolution_log.append(f"Free slots available: {len(free_slots)}")
-    
-    # Read ALL conflicts and group by student
-    student_conflicts = defaultdict(list)
-    for c in conflicts:
-        student_conflicts[c.get("reg_no", "")].append(c)
-    
-    resolution_log.append(f"Conflicts by student: {len(student_conflicts)}")
-    
-    # Collect all unique courses involved in conflicts
-    problem_courses = set()
-    for c in conflicts:
-        if c.get("course1"): problem_courses.add(c.get("course1"))
-        if c.get("course2"): problem_courses.add(c.get("course2"))
-        if c.get("course_a"): problem_courses.add(c.get("course_a"))
-        if c.get("course_b"): problem_courses.add(c.get("course_b"))
-    
-    resolution_log.append(f"Courses to resolve: {list(problem_courses)}")
-    
-    course_conflict_count = defaultdict(int)
-    for c in conflicts:
-        course_conflict_count[c.get("course1", c.get("course_a", ""))] += 1
-        course_conflict_count[c.get("course2", c.get("course_b", ""))] += 1
-    
-    # Sort courses by conflict count (most conflicted first)
-    problem_courses = sorted(course_conflict_count.items(), key=lambda x: -x[1])
-    resolution_log.append(f"Agent 7: Analyzing {len(conflicts)} conflicts across {len(problem_courses)} courses")
-    
-    # Get all available slots for reassignment
-    available_slots = [(s.get("date", ""), s.get("session", "")) for s in open_slots]
-    used_slots = set(course_slot.values())
-    free_slots = [s for s in available_slots if s not in used_slots]
-    
     resolved_count = 0
-    max_iterations = len(problem_courses) * 2
-    
-    for course, _ in problem_courses[:10]:  # Limit iterations
-        if resolved_count >= len(conflicts):
-            break
-            
-        # Find a free slot for this course
+    for c in conflicts:
+        reg_no = c.get("reg_no")
+        course_a = c.get("course_a")
+        course_b = c.get("course_b")
+        date = c.get("date")
+
+        # Attempt FN -> AN or slot shift
         for slot in free_slots:
-            # Check if moving this course to slot resolves conflicts
-            test_slot_key = slot
-            
-            # Check if any student in this course has other courses in this slot
-            course_students = set()
-            for e in enrolments:
-                if e.get("course_code", "") == course:
-                    course_students.add(e.get("reg_no", ""))
-            
-            can_move = True
-            for student in course_students:
-                for other_course in student_courses.get(student, []):
-                    if other_course != course:
-                        other_slot = course_slot.get(other_course, (None, None))
-                        if other_slot == test_slot_key:
-                            can_move = False
-                            break
-                if not can_move:
-                    break
-            
-            if can_move:
-                # Move course to free slot
-                for exam in resolved_schedule:
-                    if exam.get("course_code", "") == course:
-                        exam["date"] = slot[0]
-                        exam["session"] = slot[1]
-                        exam["rule_applied"] = "Rule 7 (Agent 7: Conflict Resolution)"
-                        course_slot[course] = slot
-                        resolution_log.append(f"  → Moved {course} to {slot[0]} {slot[1]}")
-                        resolved_count += 1
-                        break
-                free_slots.remove(slot)
-                break
-    
-    # If still conflicts, try swapping sessions on same day
-    if resolved_count < len(conflicts):
-        for conflict in conflicts:
-            course_a = conflict.get("course_a")
-            course_b = conflict.get("course_b")
-            date = conflict.get("date")
-            
-            # Try swapping sessions
+            d_new, s_new = slot
+            # Move course_b to free slot
             for exam in resolved_schedule:
-                if exam.get("course_code") == course_a and exam.get("date") == date:
-                    if exam.get("session") == "FN":
-                        exam["session"] = "AN"
-                        exam["rule_applied"] = "Rule 7 (Agent 7: Session Swap)"
-                        resolution_log.append(f"  → Swapped {course_a} FN→AN on {date}")
-                        resolved_count += 1
-                        break
-    
-    unresolved = len(conflicts) - resolved_count
-    
-    resolution_log.append(f"Agent 7: Resolved {resolved_count}/{len(conflicts)} conflicts. Unresolved: {unresolved}")
+                if exam.get("course_code") == course_b and exam.get("date") == date:
+                    exam["date"] = d_new
+                    exam["session"] = s_new
+                    exam["rule_applied"] = "Rule 7 (Agent 7: Shift Slot)"
+                    resolution_log.append(f"  → Moved {course_b} from {date} to {d_new} [{s_new}]")
+                    resolved_count += 1
+                    break
+            break
+
+    unresolved = max(0, len(conflicts) - resolved_count)
+    resolution_log.append(f"Agent 7: Resolved {resolved_count}/{len(conflicts)} conflicts.")
     
     return {
         "schedule": resolved_schedule,
@@ -164,13 +91,29 @@ def resolve_conflicts(schedule, enrolments, conflicts, open_slots):
     }
 
 
+def resolve_cumulative_conflicts(schedule, enrolments, open_slots):
+    """
+    Wrapper function imported by run_agents.py to resolve cumulative conflicts
+    and validate final zero-clash status.
+    """
+    from agent2_conflict import check_conflicts
+    initial_check = check_conflicts(schedule, enrolments)
+    if initial_check.get("status") == "PASS":
+        return schedule, "PASS", []
+
+    res = resolve_conflicts(schedule, enrolments, initial_check.get("conflicts", []), open_slots)
+    resolved_schedule = res.get("schedule", schedule)
+    
+    final_check = check_conflicts(resolved_schedule, enrolments)
+    return resolved_schedule, final_check.get("status", "PASS"), final_check.get("conflicts", [])
+
+
 def suggest_manual_resolutions(conflicts, enrolments):
     """
     Provides human-readable suggestions for remaining conflicts.
     """
     suggestions = []
     
-    # Group by student
     student_conflicts = defaultdict(list)
     for c in conflicts:
         student_conflicts[c.get("reg_no", "")].append(c)

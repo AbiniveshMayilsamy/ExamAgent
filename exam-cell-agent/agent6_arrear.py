@@ -1,81 +1,56 @@
 """
 agent6_arrear.py — Agent 6: Arrear & Backlog Scheduler
-Rules: Rule 2 (arrears consecutive — 2/day, no gap needed),
-       Rule 7 (arrear in opposite session of regular exam day),
-       Rule 10 (arrears fit year-wise session pattern),
-       Rule 13 (arrears fit year-wise pattern too).
-
-Stats emitted:
-  arrear_courses, arrear_slots_assigned, arrear_students, days_used
+Rules:
+  Rule 2  — 1 student max 1 exam per session (zero clashes)
+  Rule 7  — Arrear exams go in the OPPOSITE session of the regular exam on that day
+  Rule 1  — Max 2 sessions per day (FN + AN), so max 2 arrear exams on any day
 """
 from collections import defaultdict
-from config import DEFAULT_YEAR_SESSION_PATTERN, ARREAR_MAX_PER_DAY, sem_to_year
+from config import DEFAULT_YEAR_SESSION_PATTERN, sem_to_year, SESSION_TIMINGS
+
+OPPOSITE = {"FN": "AN", "AN": "FN"}
 
 
 def schedule_arrears(
     spaced_schedule: list[dict],
     arrear_enrolments: list[dict],
     open_slots: list[dict],
-    year_session_pattern: dict[int, str] | None = None,
+    year_session_pattern: dict | None = None,
     all_enrolments: list[dict] | None = None,
 ) -> tuple[list[dict], dict]:
     """
-    Schedule arrear exams.
-
-    Strategy:
-      - Pack 2 arrear exams per day (FN + AN) — no gap required between arrear days
-      - Prefer days that already have a regular exam (opposite session) — Rule 7
-      - Fit arrear session to year-wise pattern — Rule 13
-      - Never reuse the same slot as the regular version of the same course
-      - NEVER clash: for each student, arrear session must be different from ALL their regular exams
-
-    Returns:
-        (full_schedule, stats)
+    Schedule arrear exams without any student clash.
     """
     pattern = year_session_pattern or DEFAULT_YEAR_SESSION_PATTERN
     schedule = [dict(e) for e in spaced_schedule]
 
-    # Regular slot lookup: course_code -> (date, session)
-    regular_slot: dict[str, tuple] = {}
+    regular_course_slot: dict[str, tuple] = {}
     for e in schedule:
         if not e.get("is_arrear", False):
-            regular_slot[e["course_code"]] = (e["date"], e["session"])
+            regular_course_slot[e["course_code"]] = (e["date"], e["session"])
 
-    # Track all used (date, session) pairs
-    used_slots: set[tuple] = {(e["date"], e["session"]) for e in schedule}
-
-    # Track student -> set of (date, session) they already have (from regular exams)
-    # This is the KEY fix: populate from the spaced_schedule using all_enrolments
-    student_regular_slots: dict[str, set] = defaultdict(set)
-    
-    # Build a map: reg_no -> set of regular course_codes they're taking
-    student_regular_courses: dict[str, set] = defaultdict(set)
+    student_slots: dict[str, set] = defaultdict(set)
     if all_enrolments:
         for enrol in all_enrolments:
             if not enrol.get("is_arrear", False):
-                student_regular_courses[enrol["reg_no"]].add(enrol["course_code"])
-    
-    # Now map those courses to their scheduled slots
-    for reg_no, course_set in student_regular_courses.items():
-        for entry in schedule:
-            if not entry.get("is_arrear", False) and entry["course_code"] in course_set:
-                student_regular_slots[reg_no].add((entry["date"], entry["session"]))
+                slot = regular_course_slot.get(enrol["course_code"])
+                if slot:
+                    student_slots[enrol["reg_no"]].add(slot)
 
-    # Group arrear enrolments by course_code
+    used_slots: set[tuple] = {(e["date"], e["session"]) for e in schedule}
+
     arrear_courses: dict[str, list] = defaultdict(list)
     for row in arrear_enrolments:
         if row.get("is_arrear", False):
             arrear_courses[row["course_code"]].append(row)
 
-    # Sort arrear courses by student count desc (pack most-needed first)
     sorted_arrears = sorted(arrear_courses.items(), key=lambda x: -len(x[1]))
 
     regular_dates = sorted({e["date"] for e in schedule if not e.get("is_arrear", False)})
-    opposite = {"FN": "AN", "AN": "FN"}
+    open_dates = sorted({s["date"] for s in open_slots})
 
     assigned_count = 0
     days_used: set[str] = set()
-    arrear_per_day: dict[str, int] = defaultdict(int)
 
     for course_code, students in sorted_arrears:
         course_name = students[0]["course_name"]
@@ -84,81 +59,45 @@ def schedule_arrears(
         reg_nos = [s["reg_no"] for s in students]
         branches = sorted({s["branch"] for s in students})
 
-        # Preferred session for this year's arrear (Rule 13)
-        preferred_session = pattern.get(year)
-        regular_course_slot = regular_slot.get(course_code)
-
         assigned = False
 
-        # --- Pass 1: prefer days with a regular exam, use opposite session (Rule 7) ---
+        # Pass 1: prefer opposite session on a regular exam day (Rule 7)
         for reg_date in regular_dates:
-            if arrear_per_day[reg_date] >= ARREAR_MAX_PER_DAY:
-                continue
+            reg_sessions_today = {
+                e["session"] for e in schedule
+                if not e.get("is_arrear", False) and e["date"] == reg_date
+            }
 
-            # Determine opposite session of regular exam on this date
-            reg_sessions = {e["session"] for e in schedule if not e.get("is_arrear", False) and e["date"] == reg_date}
-            target_sessions = []
-            if "FN" in reg_sessions and "AN" not in reg_sessions:
-                target_sessions = ["AN", "FN"]
-            elif "AN" in reg_sessions and "FN" not in reg_sessions:
-                target_sessions = ["FN", "AN"]
-            else:
-                target_sessions = [preferred_session, "AN", "FN"] if preferred_session else ["AN", "FN"]
+            target_sessions = ["AN", "FN"] if "FN" in reg_sessions_today else ["FN", "AN"]
+            for sess in target_sessions:
+                slot_key = (reg_date, sess)
+                if not _has_clash(reg_nos, slot_key, student_slots):
+                    _place_arrear(
+                        schedule, used_slots, student_slots, days_used,
+                        course_code, course_name, reg_date, sess, sem, branches, reg_nos
+                    )
+                    assigned = True
+                    assigned_count += 1
+                    break
 
-            for target_session in target_sessions:
-                if not target_session:
-                    continue
-                slot_key = (reg_date, target_session)
-                
-                # Don't use same slot as regular version of this course
-                if regular_course_slot == slot_key:
-                    continue
-                
-                # CRITICAL: Don't clash with any student's existing regular or arrear exam
-                clash = False
-                for rn in reg_nos:
-                    if slot_key in student_regular_slots[rn]:
-                        clash = True
-                        break
-                if clash:
-                    continue
-                
-                # Assign this arrear
-                _assign_arrear(schedule, used_slots, arrear_per_day, student_regular_slots,
-                               course_code, course_name, reg_date, target_session,
-                               sem, branches, reg_nos, days_used)
-                assigned = True
-                assigned_count += 1
-                break
             if assigned:
                 break
 
-        # --- Pass 2: any open slot, pack 2/day, no gap needed ---
+        # Pass 2: fallback to any open date/session
         if not assigned:
-            for slot in open_slots:
-                d, sess = slot["date"], slot["session"]
-                slot_key = (d, sess)
-                
-                if arrear_per_day[d] >= ARREAR_MAX_PER_DAY:
-                    continue
-                if regular_course_slot == slot_key:
-                    continue
-                
-                # Check ALL students for conflicts
-                clash = False
-                for rn in reg_nos:
-                    if slot_key in student_regular_slots[rn]:
-                        clash = True
+            for d in open_dates:
+                for sess in ("FN", "AN"):
+                    slot_key = (d, sess)
+                    if not _has_clash(reg_nos, slot_key, student_slots):
+                        _place_arrear(
+                            schedule, used_slots, student_slots, days_used,
+                            course_code, course_name, d, sess, sem, branches, reg_nos
+                        )
+                        assigned = True
+                        assigned_count += 1
                         break
-                if clash:
-                    continue
-                
-                _assign_arrear(schedule, used_slots, arrear_per_day, student_regular_slots,
-                               course_code, course_name, d, sess,
-                               sem, branches, reg_nos, days_used)
-                assigned = True
-                assigned_count += 1
-                break
+                if assigned:
+                    break
 
     stats = {
         "arrear_courses": len(sorted_arrears),
@@ -166,14 +105,20 @@ def schedule_arrears(
         "arrear_students": len({s["reg_no"] for students in arrear_courses.values() for s in students}),
         "days_used": len(days_used),
         "function_type": "Arrear Packer",
-        "rules_applied": ["Rule 2 (2 arrears/day, consecutive)", "Rule 7 (opposite session)", "Rule 10/13 (year-session pattern)"],
+        "rules_applied": ["Rule 1 (max 2 sessions/day)", "Rule 2 (0 clashes)", "Rule 7 (opposite session)"],
     }
     return schedule, stats
 
 
-def _assign_arrear(schedule, used_slots, arrear_per_day, student_regular_slots,
-                   course_code, course_name, d, sess, sem, branches, reg_nos, days_used):
-    from config import SESSION_TIMINGS
+def _has_clash(reg_nos: list, slot_key: tuple, student_slots: dict) -> bool:
+    for rn in reg_nos:
+        if slot_key in student_slots.get(rn, set()):
+            return True
+    return False
+
+
+def _place_arrear(schedule, used_slots, student_slots, days_used,
+                  course_code, course_name, d, sess, sem, branches, reg_nos):
     schedule.append({
         "course_code": course_code,
         "course_name": course_name,
@@ -188,10 +133,10 @@ def _assign_arrear(schedule, used_slots, arrear_per_day, student_regular_slots,
         "difficulty": "medium",
         "credits": 3,
         "roll_ranges": {},
+        "student_reg_nos": list(set(reg_nos)),  # Store exact enrolled student reg_nos
     })
-    used_slots.add((d, sess))
-    arrear_per_day[d] += 1
+    slot_key = (d, sess)
+    used_slots.add(slot_key)
     days_used.add(d)
-    # Track this arrears slot for these students so future arrears don't clash
     for rn in reg_nos:
-        student_regular_slots[rn].add((d, sess))
+        student_slots[rn].add(slot_key)

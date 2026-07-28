@@ -2,95 +2,50 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
-const DEPT_CODES = ['CSE', 'AIML', 'CCE', 'CYSE', 'MECH', 'ECE', 'VLSI', 'EEE', 'AIDS', 'CSBS', 'IT', 'S&H']
-const DEPT_NAMES = { 
-  CSE: 'Computer Science & Engineering', 
-  AIML: 'AI & Machine Learning', 
-  CCE: 'Computer & Communication Engineering', 
-  CYSE: 'Cybersecurity', 
-  MECH: 'Mechanical Engineering', 
-  ECE: 'Electronics & Communication Engineering', 
-  VLSI: 'VLSI Design & Technology', 
-  EEE: 'Electrical & Electronics Engineering', 
-  AIDS: 'AI & Data Science', 
-  CSBS: 'Computer Science & Business Systems', 
-  IT: 'Information Technology', 
-  'S&H': 'Science & Humanities'
-}
-const DIFFICULTY_OPTIONS = ['easy', 'medium', 'hard']
-const SESSION_OPTIONS = ['FN (9:30 AM – 12:30 PM)', 'AN (1:30 PM – 4:30 PM)']
-
-const STEPS = ['Exam Window', 'Departments', 'Year Pattern', 'Holidays', 'Courses', 'Review & Run']
-
-// Auto-fill sensible start/end dates based on semester type
-function defaultDates(type) {
-  const now = new Date()
-  const year = now.getFullYear()
-  // Odd sem: Nov 1 – Dec 15 of current year (or next if we're past Dec)
-  // Even sem: Apr 1 – May 15 of current year (or next year if we're past May)
-  if (type === 'odd') {
-    const y = now.getMonth() >= 11 ? year + 1 : year   // if Dec is over, use next year
-    return { start: `${y}-11-01`, end: `${y}-12-15` }
-  } else {
-    const y = now.getMonth() >= 5 ? year + 1 : year    // if May is over, use next year
-    return { start: `${y}-04-01`, end: `${y}-05-15` }
-  }
-}
-
-// Date range limits for the picker
-function dateLimits(type) {
-  const now = new Date()
-  const year = now.getFullYear()
-  if (type === 'odd') {
-    const y = now.getMonth() >= 11 ? year + 1 : year
-    return { min: `${y}-11-01`, max: `${y}-12-31` }
-  } else {
-    const y = now.getMonth() >= 5 ? year + 1 : year
-    return { min: `${y}-04-01`, max: `${y}-05-31` }
-  }
-}
-
 export default function SchedulePage() {
   const navigate = useNavigate()
   const { trigger } = usePipelineContext()
-  const [step, setStep] = useState(0)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Step 0 — Exam Window
-  const [csvFile, setCsvFile] = useState(null)
-  const [semester, setSemester] = useState('odd')
-  const [startDate, setStartDate] = useState(() => defaultDates('odd').start)
-  const [endDate, setEndDate] = useState(() => defaultDates('odd').end)
+  // Semester Type State
+  const [semType, setSemType] = useState('odd') // 'odd' | 'even'
+
+  // Files & Start Dates per Year
+  const [files, setFiles] = useState({ 1: null, 2: null, 3: null, 4: null })
+  const [startDates, setStartDates] = useState({
+    1: '2026-11-02',
+    2: '2026-11-02',
+    3: '2026-11-02',
+    4: '2026-11-02',
+  })
+  const [arrearFile, setArrearFile] = useState(null)
+
+  // Holidays
+  const [holidayInput, setHolidayInput] = useState('')
+  const [holidays, setHolidays] = useState(['2026-11-10', '2026-11-15'])
+
+  // Options
+  const [useGroqAI, setUseGroqAI] = useState(true)
   const [humanIntervention, setHumanIntervention] = useState(false)
 
-  // Step 1 — Departments
-  const [selectedDepts, setSelectedDepts] = useState(DEPT_CODES.reduce((a, d) => ({ ...a, [d]: true }), {}))
-  const [examsPerBranch, setExamsPerBranch] = useState(DEPT_CODES.reduce((a, d) => ({ ...a, [d]: 12 }), {}))
+  const yearSemLabels = {
+    odd: { 1: 'I Year (Semester 1)', 2: 'II Year (Semester 3)', 3: 'III Year (Semester 5)', 4: 'IV Year (Semester 7)' },
+    even: { 1: 'I Year (Semester 2)', 2: 'II Year (Semester 4)', 3: 'III Year (Semester 6)', 4: 'IV Year (Semester 8)' }
+  }
 
-  // Step 2 — Year pattern
-  const [yearPattern, setYearPattern] = useState({ 1: 'FN', 2: 'FN', 3: 'FN', 4: 'AN' })
+  const handleFileChange = (year, file) => {
+    setFiles(prev => ({ ...prev, [year]: file }))
+  }
 
-  // Step 3 — Holidays
-  const [holidayInput, setHolidayInput] = useState('')
-  const [holidays, setHolidays] = useState([])
-
-  // Step 4 — Courses difficulty
-  const [courseRows, setCourseRows] = useState([
-    { code: '', difficulty: 'medium' },
-  ])
-
-  const handleSemesterChange = (val) => {
-    setSemester(val)
-    const { start, end } = defaultDates(val)
-    setStartDate(start)
-    setEndDate(end)
+  const handleStartDateChange = (year, val) => {
+    setStartDates(prev => ({ ...prev, [year]: val }))
   }
 
   const addHoliday = () => {
     if (!holidayInput) return
     const d = holidayInput.trim()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { setError('Date must be YYYY-MM-DD'); return }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { setError('Holiday date must be YYYY-MM-DD'); return }
     setHolidays(prev => [...new Set([...prev, d])])
     setHolidayInput('')
     setError('')
@@ -98,400 +53,243 @@ export default function SchedulePage() {
 
   const removeHoliday = (d) => setHolidays(prev => prev.filter(x => x !== d))
 
-  const addCourseRow = () => setCourseRows(prev => [...prev, { code: '', difficulty: 'medium' }])
-  const updateCourse = (i, field, val) => setCourseRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
-  const removeCourse = (i) => setCourseRows(prev => prev.filter((_, idx) => idx !== i))
-
-  const validate = () => {
-    if (step === 0) {
-      if (!csvFile) return 'Please upload the student data file.'
-      if (!startDate || !endDate) return 'Please select exam start and end dates.'
-      if (startDate >= endDate) return 'End date must be after start date.'
-    }
-    return ''
-  }
-
-  const next = () => {
-    const err = validate()
-    if (err) { setError(err); return }
-    setError('')
-    setStep(s => s + 1)
-  }
-
-  const back = () => { setError(''); setStep(s => s - 1) }
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault()
     setSubmitting(true)
     setError('')
+
+    const hasRegularFile = Object.values(files).some(f => f !== null)
+    if (!hasRegularFile && !arrearFile) {
+      setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
+      setSubmitting(false)
+      return
+    }
+
     try {
-      const difficultyMap = {}
-      courseRows.forEach(r => { if (r.code.trim()) difficultyMap[r.code.trim().toUpperCase()] = r.difficulty })
-
-      const activeDepts = Object.entries(selectedDepts).filter(([, v]) => v).map(([k]) => k)
-      const epb = {}
-      activeDepts.forEach(d => { epb[d] = Number(examsPerBranch[d]) || 12 })
-
       const fd = new FormData()
-      fd.append('file', csvFile)
-      fd.append('startDate', startDate)
-      fd.append('endDate', endDate)
+      fd.append('semType', semType)
+      fd.append('startDates', JSON.stringify(startDates))
       fd.append('leaveDays', JSON.stringify(holidays))
-      fd.append('difficultyMap', JSON.stringify(difficultyMap))
-      fd.append('yearSessionPattern', JSON.stringify(yearPattern))
-      fd.append('examsPerBranch', JSON.stringify(epb))
+      fd.append('useGroqAI', useGroqAI)
       fd.append('humanIntervention', humanIntervention)
+
+      // Append files
+      Object.keys(files).forEach(yr => {
+        if (files[yr]) {
+          fd.append(`year_${yr}`, files[yr])
+        }
+      })
+
+      if (arrearFile) {
+        fd.append('arrear_file', arrearFile)
+      }
 
       await trigger(fd)
       navigate('/agents')
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to start pipeline.')
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to start exam scheduling pipeline.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const inp = 'form-input'
-  const sel = 'form-select'
-
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>New Exam Schedule</h1>
-          <p style={{ fontSize: 13, marginTop: 2 }}>Fill in the details below to generate a timetable</p>
+          <h1>New Exam Schedule Setup</h1>
+          <p style={{ fontSize: 13, marginTop: 4, color: '#64748b' }}>
+            Upload year-wise regular exam maps and optional arrear data to generate a clash-free timetable.
+          </p>
         </div>
       </div>
 
-      <div className="page-body" style={{ maxWidth: 760 }}>
-        {/* Step indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 28 }}>
-          {STEPS.map((s, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{
-                  width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: i < step ? '#1d4ed8' : i === step ? '#1d4ed8' : '#e2e8f0',
-                  color: i <= step ? '#fff' : '#94a3b8',
-                  fontSize: 12, fontWeight: 700, flexShrink: 0,
-                }}>
-                  {i < step ? '✓' : i + 1}
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 600, color: i === step ? '#1d4ed8' : '#94a3b8', whiteSpace: 'nowrap' }}>
-                  {s}
-                </div>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div style={{ flex: 1, height: 2, background: i < step ? '#1d4ed8' : '#e2e8f0', margin: '0 4px', marginBottom: 18 }} />
-              )}
-            </div>
-          ))}
-        </div>
-
+      <div className="page-body" style={{ maxWidth: 840 }}>
         {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-        <div className="card" style={{ padding: 28 }}>
-
-          {/* ── Step 0: Exam Window ── */}
-          {step === 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Exam Window</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>Upload student data and set the exam period dates.</p>
-              </div>
-              <div className="divider" />
-
-              <div className="form-group">
-                <label className="form-label">Student Enrolment File <span style={{ color: '#dc2626' }}>*</span></label>
-                <div style={{
-                  border: '2px dashed #e2e8f0', borderRadius: 10, padding: '20px',
-                  textAlign: 'center', cursor: 'pointer', background: csvFile ? '#f0fdf4' : '#f8fafc',
-                  transition: 'all 0.15s',
-                }}
-                  onClick={() => document.getElementById('csv-upload').click()}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); setCsvFile(e.dataTransfer.files[0]) }}
-                >
-                  <input id="csv-upload" type="file" accept=".xlsx,.xls,.csv,.json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" style={{ display: 'none' }}
-                    onChange={e => setCsvFile(e.target.files[0])} />
-                  {csvFile ? (
-                    <div>
-                      <div style={{ fontSize: 24, marginBottom: 6 }}>✓</div>
-                      <div style={{ fontWeight: 700, color: '#166534' }}>{csvFile.name}</div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        {(csvFile.size / 1024).toFixed(1)} KB · Click to change
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ fontSize: 28, marginBottom: 6, color: '#94a3b8' }}>↑</div>
-                      <div style={{ fontWeight: 600, color: '#334155' }}>Click to upload or drag & drop</div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Excel (.xlsx, .xls), CSV, or JSON · Student enrolment data</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Semester Type</label>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {[['odd', 'Odd Semester (Nov – Dec)'], ['even', 'Even Semester (Apr – May)']].map(([val, lbl]) => (
-                    <div key={val} onClick={() => handleSemesterChange(val)} style={{
-                      flex: 1, padding: '12px 16px', borderRadius: 8, cursor: 'pointer',
-                      border: `2px solid ${semester === val ? '#1d4ed8' : '#e2e8f0'}`,
-                      background: semester === val ? '#eff6ff' : '#fff',
-                      fontWeight: semester === val ? 700 : 500,
-                      color: semester === val ? '#1d4ed8' : '#334155',
-                      fontSize: 13, transition: 'all 0.15s',
-                    }}>
-                      {lbl}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Exam Start Date <span style={{ color: '#dc2626' }}>*</span></label>
-                  <input type="date" className={inp} value={startDate}
-                    min={dateLimits(semester).min} max={dateLimits(semester).max}
-                    onChange={e => setStartDate(e.target.value)} />
-                  <span className="form-hint">
-                    {semester === 'odd' ? 'Must be within November – December' : 'Must be within April – May'}
-                  </span>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Exam End Date <span style={{ color: '#dc2626' }}>*</span></label>
-                  <input type="date" className={inp} value={endDate}
-                    min={startDate || dateLimits(semester).min} max={dateLimits(semester).max}
-                    onChange={e => setEndDate(e.target.value)} />
-                  <span className="form-hint">
-                    {semester === 'odd' ? 'Must be within November – December' : 'Must be within April – May'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="form-checkbox-row" onClick={() => setHumanIntervention(v => !v)}>
-                <input type="checkbox" checked={humanIntervention} onChange={() => {}} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>Enable Human Review at Each Step</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Pause after each agent completes so you can review and modify before continuing</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 1: Departments ── */}
-          {step === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Departments & Exam Count</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>Select which departments are writing exams and how many exams each should have.</p>
-              </div>
-              <div className="divider" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {DEPT_CODES.map(d => (
-                  <div key={d} style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '12px 16px', borderRadius: 10,
-                    border: `1.5px solid ${selectedDepts[d] ? '#1d4ed8' : '#e2e8f0'}`,
-                    background: selectedDepts[d] ? '#eff6ff' : '#f8fafc',
-                    transition: 'all 0.15s',
-                  }}>
-                    <input type="checkbox" checked={selectedDepts[d]}
-                      onChange={e => setSelectedDepts(prev => ({ ...prev, [d]: e.target.checked }))}
-                      style={{ width: 16, height: 16, accentColor: '#1d4ed8', cursor: 'pointer' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{d}</div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>{DEPT_NAMES[d]}</div>
-                    </div>
-                    {selectedDepts[d] && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Max exams:</label>
-                        <input type="number" min={1} max={30} value={examsPerBranch[d]}
-                          onChange={e => setExamsPerBranch(prev => ({ ...prev, [d]: e.target.value }))}
-                          style={{ width: 64, padding: '6px 10px', border: '1.5px solid #e2e8f0', borderRadius: 6, fontSize: 13, textAlign: 'center' }} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 2: Year Pattern ── */}
-          {step === 2 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Year-wise Session Pattern</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>
-                  Set which session (morning or afternoon) each year of students should write their exams.
-                  This helps avoid hall allocation conflicts.
-                </p>
-              </div>
-              <div className="divider" />
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#1e40af' }}>
-                FN = Forenoon (9:30 AM – 12:30 PM) &nbsp;·&nbsp; AN = Afternoon (1:30 PM – 4:30 PM)
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {[1, 2, 3, 4].map(yr => (
-                  <div key={yr} style={{
-                    display: 'flex', alignItems: 'center', gap: 16,
-                    padding: '14px 18px', borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#fff',
-                  }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
-                        {yr === 1 ? '1st Year' : yr === 2 ? '2nd Year' : yr === 3 ? '3rd Year' : 'Final Year (4th)'}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        Semester {yr * 2 - 1} & {yr * 2}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {['FN', 'AN'].map(sess => (
-                        <div key={sess} onClick={() => setYearPattern(p => ({ ...p, [yr]: sess }))} style={{
-                          padding: '8px 18px', borderRadius: 8, cursor: 'pointer',
-                          border: `2px solid ${yearPattern[yr] === sess ? '#1d4ed8' : '#e2e8f0'}`,
-                          background: yearPattern[yr] === sess ? '#1d4ed8' : '#f8fafc',
-                          color: yearPattern[yr] === sess ? '#fff' : '#64748b',
-                          fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
-                        }}>
-                          {sess}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3: Holidays ── */}
-          {step === 3 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Government Holidays & Leave Days</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>Add any dates when exams cannot be held — public holidays, college events, etc.</p>
-              </div>
-              <div className="divider" />
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input type="date" className={inp} value={holidayInput}
-                  min={dateLimits(semester).min} max={dateLimits(semester).max}
-                  onChange={e => setHolidayInput(e.target.value)}
-                  style={{ flex: 1 }} />
-                <button className="btn btn-primary" onClick={addHoliday}>Add Date</button>
-              </div>
-              {holidays.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13, border: '1.5px dashed #e2e8f0', borderRadius: 8 }}>
-                  No holidays added yet. The system will schedule exams on all working days.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {holidays.sort().map(d => (
-                    <div key={d} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 14px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff',
-                    }}>
-                      <div>
-                        <span style={{ fontWeight: 600, color: '#0f172a' }}>{d}</span>
-                        <span style={{ marginLeft: 10, fontSize: 12, color: '#64748b' }}>
-                          {new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-                        </span>
-                      </div>
-                      <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }}
-                        onClick={() => removeHoliday(d)}>Remove</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Step 4: Courses ── */}
-          {step === 4 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Course Difficulty (Optional)</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>
-                  Mark difficult courses so the system gives students extra preparation time before those exams.
-                  Courses with 4+ credits are automatically treated as hard.
-                </p>
-              </div>
-              <div className="divider" />
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#92400e' }}>
-                Hard courses get a 2-day gap before them. Medium/Easy courses get the standard 1-day gap.
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {courseRows.map((row, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <input className={inp} placeholder="Course code (e.g. CS301)"
-                      value={row.code} onChange={e => updateCourse(i, 'code', e.target.value)}
-                      style={{ flex: 1, textTransform: 'uppercase' }} />
-                    <select className={sel} value={row.difficulty}
-                      onChange={e => updateCourse(i, 'difficulty', e.target.value)}
-                      style={{ width: 140 }}>
-                      {DIFFICULTY_OPTIONS.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
-                    </select>
-                    {courseRows.length > 1 && (
-                      <button className="btn btn-danger" style={{ padding: '8px 12px' }}
-                        onClick={() => removeCourse(i)}>×</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button className="btn btn-secondary" onClick={addCourseRow} style={{ alignSelf: 'flex-start' }}>
-                + Add Another Course
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 5: Review ── */}
-          {step === 5 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h2>Review & Generate</h2>
-                <p style={{ marginTop: 4, fontSize: 13 }}>Review your settings before generating the timetable.</p>
-              </div>
-              <div className="divider" />
-
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          
+          {/* 1. Semester Type Selector */}
+          <div className="card" style={{ padding: 22 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              1. Select Semester Type
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+              Choose whether you are scheduling Odd or Even semester examinations.
+            </p>
+            <div style={{ display: 'flex', gap: 14 }}>
               {[
-                { label: 'Student Data File', value: csvFile?.name },
-                { label: 'Exam Period', value: `${startDate} to ${endDate}` },
-                { label: 'Semester Type', value: semester === 'odd' ? 'Odd (Nov–Dec)' : 'Even (Apr–May)' },
-                { label: 'Departments', value: Object.entries(selectedDepts).filter(([,v]) => v).map(([k]) => k).join(', ') },
-                { label: 'Holidays', value: holidays.length > 0 ? holidays.join(', ') : 'None' },
-                { label: 'Human Review', value: humanIntervention ? 'Enabled — pipeline will pause after each agent' : 'Disabled — fully automatic' },
-                { label: 'Year Pattern', value: Object.entries(yearPattern).map(([yr, sess]) => `Year ${yr}: ${sess}`).join(' · ') },
-                { label: 'Hard Courses', value: courseRows.filter(r => r.code && r.difficulty === 'hard').map(r => r.code).join(', ') || 'None specified' },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ display: 'flex', gap: 16, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ width: 160, fontSize: 13, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{label}</div>
-                  <div style={{ fontSize: 13, color: '#0f172a' }}>{value}</div>
+                ['odd', 'Odd Semesters (Semesters 1, 3, 5, 7)'],
+                ['even', 'Even Semesters (Semesters 2, 4, 6, 8)']
+              ].map(([val, lbl]) => (
+                <div key={val} onClick={() => setSemType(val)} style={{
+                  flex: 1, padding: '16px 20px', borderRadius: 10, cursor: 'pointer',
+                  border: `2px solid ${semType === val ? '#1d4ed8' : '#e2e8f0'}`,
+                  background: semType === val ? '#eff6ff' : '#ffffff',
+                  fontWeight: semType === val ? 700 : 500,
+                  color: semType === val ? '#1d4ed8' : '#334155',
+                  fontSize: 14, transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}>
+                  <input type="radio" name="semType" checked={semType === val} onChange={() => {}} style={{ accentColor: '#1d4ed8' }} />
+                  {lbl}
                 </div>
               ))}
-
-              <div className="alert alert-info" style={{ marginTop: 8 }}>
-                The pipeline will run 6 AI agents in sequence. This typically takes 2–5 minutes depending on data size and LLM response time.
-              </div>
             </div>
-          )}
+          </div>
 
-          {/* Navigation */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1.5px solid #e2e8f0' }}>
-            <button className="btn btn-secondary" onClick={back} disabled={step === 0}
-              style={{ visibility: step === 0 ? 'hidden' : 'visible' }}>
-              Back
-            </button>
-            {step < STEPS.length - 1 ? (
-              <button className="btn btn-primary" onClick={next}>
-                Continue
+          {/* 2. Year-wise Regular Exam Maps & Start Dates */}
+          <div className="card" style={{ padding: 22 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              2. Year-Wise Regular Exam Maps & Start Dates
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+              Upload dataset files for any year(s) you wish to schedule. Start dates can be set individually per year.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[1, 2, 3, 4].map(yr => (
+                <div key={yr} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14,
+                  padding: 16, borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#f8fafc'
+                }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#1e293b' }}>
+                      📁 {yearSemLabels[semType][yr]} File (Optional)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={e => handleFileChange(yr, e.target.files[0])}
+                      className="form-input"
+                      style={{ padding: '6px 10px', background: '#ffffff', cursor: 'pointer' }}
+                    />
+                    {files[yr] && (
+                      <span style={{ fontSize: 12, color: '#166534', fontWeight: 600, marginTop: 4, display: 'inline-block' }}>
+                        ✓ {files[yr].name} ({(files[yr].size / 1024).toFixed(1)} KB)
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600 }}>📅 Start Date</label>
+                    <input
+                      type="date"
+                      value={startDates[yr]}
+                      onChange={e => handleStartDateChange(yr, e.target.value)}
+                      className="form-input"
+                      style={{ background: '#ffffff' }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Arrear Exam Dataset */}
+          <div className="card" style={{ padding: 22 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              3. Arrear / Backlog Exam Data (Optional)
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 14 }}>
+              Upload arrear backlog entries. Student names will be auto-filled from the master roster using Reg No.
+            </p>
+            <div className="form-group">
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={e => setArrearFile(e.target.files[0])}
+                className="form-input"
+                style={{ padding: '8px 12px', background: '#f8fafc', cursor: 'pointer' }}
+              />
+              {arrearFile && (
+                <span style={{ fontSize: 12, color: '#166534', fontWeight: 600, marginTop: 4, display: 'inline-block' }}>
+                  ✓ Arrear File Attached: {arrearFile.name}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Government Holidays / Leave Days */}
+          <div className="card" style={{ padding: 22 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              4. Government Holidays & Leave Days
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 14 }}>
+              No exams will be scheduled on these dates.
+            </p>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+              <input
+                type="date"
+                className="form-input"
+                value={holidayInput}
+                onChange={e => setHolidayInput(e.target.value)}
+                style={{ width: 220 }}
+              />
+              <button type="button" className="btn btn-secondary" onClick={addHoliday}>
+                + Add Leave Date
               </button>
+            </div>
+            {holidays.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {holidays.map(d => (
+                  <span key={d} className="badge badge-blue" style={{ fontSize: 13, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    📅 {d}
+                    <button type="button" onClick={() => removeHoliday(d)} style={{ background: 'none', border: 'none', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}>×</button>
+                  </span>
+                ))}
+              </div>
             ) : (
-              <button className="btn btn-primary btn-lg" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Starting...' : 'Generate Timetable'}
-              </button>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>No leave days added yet.</span>
             )}
           </div>
-        </div>
+
+          {/* 5. Groq AI & Pipeline Settings */}
+          <div className="card" style={{ padding: 22 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              5. AI Intelligence & Execution Options
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={useGroqAI}
+                  onChange={e => setUseGroqAI(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: '#1d4ed8' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>🤖 Enable Groq AI Course Difficulty & Summary Generation</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Uses LLM to assess subject difficulty and summarize timetable metrics</div>
+                </div>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={humanIntervention}
+                  onChange={e => setHumanIntervention(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: '#1d4ed8' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Enable Human Review / Interventions</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Pauses execution after each agent step for manual review and overrides</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Submit Action Button */}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn btn-primary"
+            style={{
+              padding: '16px', fontSize: 16, fontWeight: 700, borderRadius: 10,
+              background: submitting ? '#94a3b8' : 'linear-gradient(135deg, #1d4ed8, #7c3aed)',
+              border: 'none', cursor: submitting ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {submitting ? '⟳ Scheduling Exam Pipeline...' : '🚀 Generate Exam Schedule'}
+          </button>
+        </form>
       </div>
     </div>
   )

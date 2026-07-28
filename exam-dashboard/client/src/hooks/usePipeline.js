@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSocket } from '../context/SocketContext'
-import { runClientSidePipeline } from '../utils/clientSideSolver'
 import axios from 'axios'
 
 const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
@@ -42,6 +41,7 @@ export function usePipeline() {
   const [aiSuggestions, setAiSuggestions] = useState('')
   const [stats, setStats] = useState({ totalExams: 0, totalArrears: 0, conflictsFound: 0 })
   const [deptRollRanges, setDeptRollRanges] = useState({})
+  const [students, setStudents] = useState([])
 
   const updateAgent = useCallback((agentId, patch) => {
     setAgents(prev => prev.map(a => a.agentId === agentId ? { ...a, ...patch } : a))
@@ -67,13 +67,14 @@ export function usePipeline() {
       ai_suggestion: ({ text }) => setAiSuggestions(text),
 
       pipeline_done: ({ status, schedule: s, auditLog: al, conflicts: c,
-                        totalExams, totalArrears, deptRollRanges: drr }) => {
+                        totalExams, totalArrears, deptRollRanges: drr, students: sts }) => {
         setPipelineStatus(status === 'PASS' ? 'done' : 'manual_review')
         setSchedule(s || [])
         setAuditLog(al || [])
         setConflicts(c || [])
         setStats({ totalExams, totalArrears, conflictsFound: (c || []).length })
         setDeptRollRanges(drr || {})
+        if (sts && sts.length > 0) setStudents(sts)
       },
 
       pipeline_fail: ({ error }) => {
@@ -112,42 +113,26 @@ export function usePipeline() {
       setRunId(data.runId)
       return data.runId
     } catch (err) {
-      console.warn('Backend server not reachable. Running client-side browser pipeline fallback...', err)
-      
-      let csvText = '';
-      const file = formData.get('file');
-      if (file && typeof file.text === 'function') {
-        csvText = await file.text();
-      }
-
-      const params = {
-        csvText,
-        startDate: formData.get('startDate') || '2026-11-02',
-        endDate: formData.get('endDate') || '2026-11-20',
-        leaveDays: JSON.parse(formData.get('leaveDays') || '[]'),
-        difficultyMap: JSON.parse(formData.get('difficultyMap') || '{}')
-      };
-
-      runClientSidePipeline(
-        params,
-        (agentId, functionType, rules) => updateAgent(agentId, { status: 'running', logs: [], functionType, rules }),
-        (agentId, message) => setAgents(prev => prev.map(a => a.agentId === agentId ? { ...a, logs: [...a.logs, message] } : a)),
-        (agentId, summary, llmExplanation) => updateAgent(agentId, { status: 'done', summary, llmExplanation }),
-        (result) => {
-          setPipelineStatus(result.status === 'PASS' ? 'done' : 'manual_review');
-          setSchedule(result.schedule || []);
-          setAuditLog(result.auditLog || []);
-          setConflicts(result.conflicts || []);
-          setAiSuggestions(result.aiSuggestions || '');
-          setStats({ totalExams: result.totalExams, totalArrears: result.totalArrears, conflictsFound: result.conflicts.length });
-        }
-      );
-      return 'client-side-run';
+      const errMsg = err.response?.data?.error || err.message || 'Failed to connect to backend server.'
+      console.error('Pipeline Trigger Error:', errMsg)
+      setPipelineStatus('failed')
+      setAuditLog([`Trigger Error: ${errMsg}`])
+      throw err
     }
   }, [updateAgent])
 
   return {
-    agents, runId, pipelineStatus, schedule, conflicts,
-    auditLog, aiSuggestions, stats, deptRollRanges, trigger,
+    agents,
+    runId,
+    pipelineStatus,
+    schedule,
+    conflicts,
+    auditLog,
+    aiSuggestions,
+    stats,
+    deptRollRanges,
+    students,
+    trigger,
+    updateAgent,
   }
 }

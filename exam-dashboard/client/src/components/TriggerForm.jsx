@@ -1,56 +1,61 @@
 import { useState } from 'react'
 
-const DEFAULT_DIFFICULTY = JSON.stringify({
-  CS301: 'hard', CS302: 'hard', MA101: 'medium',
-  EC301: 'medium', EC302: 'easy', ME301: 'hard',
-}, null, 2)
-
-const DEFAULT_YEAR_PATTERN = JSON.stringify({
-  1: 'FN', 2: 'FN', 3: 'FN', 4: 'AN',
-}, null, 2)
-
-const DEFAULT_EXAMS_PER_BRANCH = JSON.stringify({
-  CS: 12, IT: 12, CB: 10, AM: 10, EC: 12, EE: 12, ME: 10, CV: 10,
-}, null, 2)
-
 export default function TriggerForm({ onTrigger, disabled }) {
-  const [file, setFile] = useState(null)
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [semType, setSemType] = useState('odd') // 'odd' | 'even'
+  
+  // Year Files & Start Dates
+  const [files, setFiles] = useState({ 1: null, 2: null, 3: null, 4: null })
+  const [startDates, setStartDates] = useState({ 1: '2026-11-02', 2: '2026-11-02', 3: '2026-11-02', 4: '2026-11-02' })
+  const [arrearFile, setArrearFile] = useState(null)
+  
   const [leaveDays, setLeaveDays] = useState('')
-  const [difficultyRaw, setDifficultyRaw] = useState(DEFAULT_DIFFICULTY)
-  const [yearPatternRaw, setYearPatternRaw] = useState(DEFAULT_YEAR_PATTERN)
-  const [examsPerBranchRaw, setExamsPerBranchRaw] = useState(DEFAULT_EXAMS_PER_BRANCH)
+  const [useGroqAI, setUseGroqAI] = useState(true)
   const [humanIntervention, setHumanIntervention] = useState(false)
-  const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState('')
+
+  const handleFileChange = (year, file) => {
+    setFiles(prev => ({ ...prev, [year]: file }))
+  }
+
+  const handleStartDateChange = (year, dateVal) => {
+    setStartDates(prev => ({ ...prev, [year]: dateVal }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!file || !startDate || !endDate) {
-      setError('File, start date and end date are required.')
+    
+    // Ensure at least 1 file is selected
+    const hasYearFile = Object.values(files).some(f => f !== null)
+    if (!hasYearFile && !arrearFile) {
+      setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
       return
     }
-    let difficultyMap = {}, yearSessionPattern = {}, examsPerBranch = {}
-    try { difficultyMap = JSON.parse(difficultyRaw) } catch { setError('Difficulty map: invalid JSON.'); return }
-    try { yearSessionPattern = JSON.parse(yearPatternRaw) } catch { setError('Year-session pattern: invalid JSON.'); return }
-    try { examsPerBranch = JSON.parse(examsPerBranchRaw) } catch { setError('Exams-per-branch: invalid JSON.'); return }
 
     const leaves = leaveDays.split(',').map(d => d.trim()).filter(Boolean)
     const fd = new FormData()
-    fd.append('file', file)
-    fd.append('startDate', startDate)
-    fd.append('endDate', endDate)
+    
+    fd.append('semType', semType)
     fd.append('leaveDays', JSON.stringify(leaves))
-    fd.append('difficultyMap', JSON.stringify(difficultyMap))
-    fd.append('yearSessionPattern', JSON.stringify(yearSessionPattern))
-    fd.append('examsPerBranch', JSON.stringify(examsPerBranch))
+    fd.append('useGroqAI', useGroqAI)
     fd.append('humanIntervention', humanIntervention)
+    fd.append('startDates', JSON.stringify(startDates))
+
+    // Append Year files
+    Object.keys(files).forEach(yr => {
+      if (files[yr]) {
+        fd.append(`year_${yr}`, files[yr])
+      }
+    })
+
+    if (arrearFile) {
+      fd.append('arrear_file', arrearFile)
+    }
+
     try {
       await onTrigger(fd)
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to start pipeline.')
+      setError(err.response?.data?.error || 'Failed to start exam scheduling pipeline.')
     }
   }
 
@@ -59,76 +64,70 @@ export default function TriggerForm({ onTrigger, disabled }) {
     color: '#f1f5f9', padding: '8px 10px', fontSize: 13, width: '100%', boxSizing: 'border-box',
   }
   const lbl = { color: '#94a3b8', fontSize: 12, marginBottom: 4, display: 'block' }
-  const ta = { ...inp, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }
+
+  const yearSemLabels = {
+    odd: { 1: 'I Year (Semester 1)', 2: 'II Year (Semester 3)', 3: 'III Year (Semester 5)', 4: 'IV Year (Semester 7)' },
+    even: { 1: 'I Year (Semester 2)', 2: 'II Year (Semester 4)', 3: 'III Year (Semester 6)', 4: 'IV Year (Semester 8)' }
+  }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>
-        <label style={lbl}>Student Data / Arrear File (Excel .xlsx, .csv, .json)</label>
-        <input type="file" accept=".xlsx,.xls,.csv,.json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" onChange={e => setFile(e.target.files[0])}
-          style={{ ...inp, padding: '6px' }} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <div>
-          <label style={lbl}>Exam Start Date</label>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} />
-        </div>
-        <div>
-          <label style={lbl}>Exam End Date</label>
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inp} />
-        </div>
-      </div>
-
-      <div>
-        <label style={lbl}>Govt Holidays / Leave Days (YYYY-MM-DD, comma-separated)</label>
-        <input type="text" placeholder="2026-11-10, 2026-11-15"
-          value={leaveDays} onChange={e => setLeaveDays(e.target.value)} style={inp} />
-      </div>
-
-      {/* Advanced toggle */}
-      <button type="button" onClick={() => setAdvanced(v => !v)} style={{
-        background: 'none', border: '1px solid #334155', borderRadius: 6,
-        color: '#64748b', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
-      }}>
-        {advanced ? '▲' : '▼'} Advanced Settings
-      </button>
-
-      {advanced && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={lbl}>Year-Session Pattern (year → "FN" | "AN")</label>
-            <textarea value={yearPatternRaw} onChange={e => setYearPatternRaw(e.target.value)}
-              rows={5} style={ta} />
-            <div style={{ color: '#475569', fontSize: 10, marginTop: 3 }}>
-              1=1st yr, 2=2nd yr, 3=3rd yr, 4=final yr · FN=9:30–12:30, AN=1:30–4:30
-            </div>
-          </div>
-
-          <div>
-            <label style={lbl}>Exams Per Branch (branch → max count)</label>
-            <textarea value={examsPerBranchRaw} onChange={e => setExamsPerBranchRaw(e.target.value)}
-              rows={4} style={ta} />
-          </div>
-
-          <div>
-            <label style={lbl}>Course Difficulty Map (JSON) — credits ≥ 4 auto-treated as hard</label>
-            <textarea value={difficultyRaw} onChange={e => setDifficultyRaw(e.target.value)}
-              rows={5} style={ta} />
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={humanIntervention}
-              onChange={e => setHumanIntervention(e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
-            <span style={{ color: '#94a3b8', fontSize: 12 }}>
-              Human Intervention — pause after each agent for review/override
-            </span>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Semester Type Selector */}
+      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+        <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600, fontSize: 13 }}>Semester Type</label>
+        <div style={{ display: 'flex', gap: 20, marginTop: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>
+            <input type="radio" name="semType" value="odd" checked={semType === 'odd'} onChange={() => setSemType('odd')} style={{ accentColor: '#3b82f6' }} />
+            Odd Semesters (Sem 1, 3, 5, 7)
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>
+            <input type="radio" name="semType" value="even" checked={semType === 'even'} onChange={() => setSemType('even')} style={{ accentColor: '#3b82f6' }} />
+            Even Semesters (Sem 2, 4, 6, 8)
           </label>
         </div>
-      )}
+      </div>
 
-      {error && <div style={{ color: '#f87171', fontSize: 12 }}>{error}</div>}
+      {/* Year-wise File Inputs & Start Dates */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {[1, 2, 3, 4].map(yr => (
+          <div key={yr} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
+            <div>
+              <label style={lbl}>📁 {yearSemLabels[semType][yr]} File (Optional)</label>
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={e => handleFileChange(yr, e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+            </div>
+            <div>
+              <label style={lbl}>📅 Start Date</label>
+              <input type="date" value={startDates[yr]} onChange={e => handleStartDateChange(yr, e.target.value)} style={inp} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Arrear Exam File */}
+      <div style={{ background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
+        <label style={lbl}>🚨 Arrear Exam File (Optional .xlsx, .csv)</label>
+        <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+      </div>
+
+      {/* Holidays / Leave Days */}
+      <div>
+        <label style={lbl}>📅 Government Holidays / Leave Days (YYYY-MM-DD, comma-separated)</label>
+        <input type="text" placeholder="2026-11-10, 2026-11-15, 2026-11-26" value={leaveDays} onChange={e => setLeaveDays(e.target.value)} style={inp} />
+      </div>
+
+      {/* Groq AI Options */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#0f172a', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={useGroqAI} onChange={e => setUseGroqAI(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
+          <span style={{ color: '#e2e8f0', fontSize: 13 }}>🤖 Enable Groq AI Course Difficulty & Summary Generation</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={humanIntervention} onChange={e => setHumanIntervention(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
+          <span style={{ color: '#94a3b8', fontSize: 12 }}>Pause after each agent step for manual review / override</span>
+        </label>
+      </div>
+
+      {error && <div style={{ color: '#f87171', fontSize: 12, padding: '6px 10px', background: '#450a0a', borderRadius: 6 }}>{error}</div>}
 
       <button type="submit" disabled={disabled} style={{
         background: disabled ? '#1e293b' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
@@ -136,7 +135,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
         border: 'none', borderRadius: 8, padding: '12px',
         fontSize: 14, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
       }}>
-        {disabled ? '⟳ Pipeline Running...' : '🚀 Generate Timetable'}
+        {disabled ? '⟳ Scheduling Pipeline Running...' : '🚀 Generate Exam Schedule'}
       </button>
     </form>
   )

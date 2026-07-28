@@ -19,22 +19,22 @@ from data_loader import load_students
 # ── Agent 1 ──────────────────────────────────────────────────────────────────
 
 def test_agent1_basic_slot_count():
-    slots = build_calendar("2026-11-01", "2026-11-05", [])
+    slots, _ = build_calendar("2026-11-01", "2026-11-05", [])
     assert len(slots) == 10  # 5 days × 2 sessions
 
 def test_agent1_leave_days_excluded():
-    slots = build_calendar("2026-11-01", "2026-11-05", ["2026-11-03"])
+    slots, _ = build_calendar("2026-11-01", "2026-11-05", ["2026-11-03"])
     assert len(slots) == 8  # 4 days × 2 sessions
     dates = {s["date"] for s in slots}
     assert "2026-11-03" not in dates
 
 def test_agent1_sessions_are_fn_and_an():
-    slots = build_calendar("2026-11-01", "2026-11-01", [])
+    slots, _ = build_calendar("2026-11-01", "2026-11-01", [])
     sessions = {s["session"] for s in slots}
     assert sessions == {"FN", "AN"}
 
 def test_agent1_empty_range():
-    slots = build_calendar("2026-11-05", "2026-11-04", [])
+    slots, _ = build_calendar("2026-11-05", "2026-11-04", [])
     assert slots == []
 
 
@@ -47,13 +47,13 @@ SAMPLE_ENROLMENTS = [
 ]
 
 def test_agent3_shared_course_detected():
-    clusters = build_course_clusters(SAMPLE_ENROLMENTS)
+    clusters, _ = build_course_clusters(SAMPLE_ENROLMENTS)
     ma101 = next(c for c in clusters if c["course_code"] == "MA101")
     assert ma101["is_shared"] is True
     assert set(ma101["branches"]) == {"CSE", "ECE"}
 
 def test_agent3_single_branch_not_shared():
-    clusters = build_course_clusters(SAMPLE_ENROLMENTS)
+    clusters, _ = build_course_clusters(SAMPLE_ENROLMENTS)
     cs301 = next(c for c in clusters if c["course_code"] == "CS301")
     assert cs301["is_shared"] is False
 
@@ -97,7 +97,7 @@ def test_agent5_enforces_1day_gap():
          "semester": 3, "branches": ["CSE"], "is_shared": False, "is_arrear": False},
     ]
     difficulty_map = {"CS301": "medium", "CS302": "medium"}
-    spaced = apply_spacing_rules(draft, difficulty_map)
+    spaced, _ = apply_spacing_rules(draft, difficulty_map)
     dates = sorted(e["date"] for e in spaced)
     from datetime import date as d
     gap = (d.fromisoformat(dates[1]) - d.fromisoformat(dates[0])).days
@@ -113,7 +113,7 @@ def test_agent5_hard_course_after_2day_gap():
          "semester": 3, "branches": ["CSE"], "is_shared": False, "is_arrear": False},
     ]
     difficulty_map = {"CS301": "easy", "CS302": "easy", "CS303": "hard"}
-    spaced = apply_spacing_rules(draft, difficulty_map)
+    spaced, _ = apply_spacing_rules(draft, difficulty_map)
     # Hard course should be moved closer to the 2-day gap after CS301
     hard_entry = next(e for e in spaced if e["course_code"] == "CS303")
     assert hard_entry is not None  # just verify it's still in the schedule

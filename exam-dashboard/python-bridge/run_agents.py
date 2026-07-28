@@ -1,307 +1,225 @@
+#!/usr/bin/env python3
 """
 python-bridge/run_agents.py
-Runs the 6-agent pipeline and streams JSON events to stdout.
-Node.js reads these events line-by-line via child_process.spawn.
-
-Human intervention: after each agent completes, emits agent_awaiting_review.
-Node.js sends a JSON line to stdin: {"action": "resume", "override": null | [...]}
-The bridge waits (blocking read) until that line arrives.
-
-Event shapes:
-  {event: agent_start,          agentId, agentName}
-  {event: agent_log,            agentId, message}
-  {event: agent_done,           agentId, summary, stats, llmExplanation, output}
-  {event: agent_awaiting_review,agentId, output, stats}
-  {event: agent_fail,           agentId, error}
-  {event: pipeline_done,        schedule, auditLog, status, conflicts, agentStats, deptRollRanges, ...}
-  {event: ai_suggestion,        text}
-  {event: pipeline_fail,        error}
+Bridge CLI script invoked by Node.js express backend.
+Parses multi-year files, streams JSON event logs to stdout, and emits final pipeline result.
 """
+
 import sys
 import os
 import json
 import argparse
-import requests
+from datetime import datetime
 
-AGENTS_PATH = os.environ.get("AGENTS_PATH", os.path.join(os.path.dirname(__file__), "../../exam-cell-agent"))
-sys.path.insert(0, AGENTS_PATH)
+# Add exam-cell-agent to python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../exam-cell-agent')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../exam-cell-agent')))
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
-
-AGENT_NAMES = {
-    1: "Calendar & Session Manager",
-    2: "Student Conflict Checker",
-    3: "Common Course Matcher",
-    4: "Regular Stream Harmonizer",
-    5: "Spacing & Difficulty Evaluator",
-    6: "Arrear & Backlog Scheduler",
-}
-
-AGENT_FUNCTION_TYPES = {
-    1: "Calendar Builder",
-    2: "Conflict Gatekeeper",
-    3: "Course Cluster Builder",
-    4: "Slot Harmonizer",
-    5: "Gap & Difficulty Enforcer",
-    6: "Arrear Packer",
-}
-
-AGENT_RULES = {
-    1: "Rules 1, 4, 5, 10 — slot grid, FN/AN timings, leave days, year-session pattern",
-    2: "Rule 2 — 1 student max 1 exam per session",
-    3: "Rules 3, 5, 8, 11 — common courses, cross-parity, exams-per-branch cap",
-    4: "Rules 4, 9, 10, 11 — session harmony, credit priority, year pattern, shared courses",
-    5: "Rules 1, 9 — min 1-day gap (Mon→Wed), hard/high-credit 2-day buffer",
-    6: "Rules 2, 7, 10, 13 — 2 arrears/day consecutive, opposite session, year pattern",
-}
+from data_loader import load_multi_year_dataset, build_dept_roll_ranges
+from agent1_calendar import build_calendar
+from agent2_conflict import check_conflicts
+from agent3_matcher import build_course_clusters
+from agent4_harmonizer import assign_regular_slots
+from agent5_spacing import apply_spacing_rules
+from agent6_arrear import schedule_arrears
+from agent7_resolver import resolve_cumulative_conflicts
+from groq_service import assess_course_difficulties, generate_schedule_summary
 
 
-def emit(obj: dict):
-    print(json.dumps(obj), flush=True)
-
-
-def ask_ollama(prompt: str) -> str:
-    try:
-        resp = requests.post(
-            f"{OLLAMA_URL}/api/generate",
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=60,
-        )
-        return resp.json().get("response", "").strip()
-    except Exception as e:
-        return f"(LLM unavailable: {e})"
-
-
-def agent_explanation(agent_id: int, summary: str) -> str:
-    prompt = (
-        f"You are an exam scheduling assistant. "
-        f"Agent {agent_id} ({AGENT_NAMES[agent_id]}) just completed. "
-        f"Function type: {AGENT_FUNCTION_TYPES[agent_id]}. "
-        f"It enforces: {AGENT_RULES[agent_id]}. "
-        f"Result: {summary}. "
-        f"Explain in 2 simple sentences what this agent did and why it matters for students."
-    )
-    return ask_ollama(prompt)
-
-
-def ai_suggestions(schedule: list, audit_log: list) -> str:
-    preview = json.dumps(schedule[:10], indent=2)
-    audit_text = "\n".join(audit_log)
-    prompt = (
-        "You are an expert academic exam scheduler. "
-        f"Timetable (first 10 entries):\n{preview}\n\n"
-        f"Audit log:\n{audit_text}\n\n"
-        "Give 3 specific, actionable suggestions to improve this timetable for student well-being. "
-        "One sentence each."
-    )
-    return ask_ollama(prompt)
-
-
-def wait_for_resume(agent_id: int, output, stats: dict):
-    """
-    Emit agent_awaiting_review and block until Node.js sends a resume signal on stdin.
-    Returns the (possibly overridden) output.
-    """
-    emit({
-        "event": "agent_awaiting_review",
-        "agentId": agent_id,
-        "output": output,
-        "stats": stats,
-    })
-    # Read one line from stdin — Node.js will write {"action":"resume","override":null|[...]}
-    try:
-        line = sys.stdin.readline()
-        if line:
-            msg = json.loads(line.strip())
-            if msg.get("action") == "resume" and msg.get("override") is not None:
-                return msg["override"]
-    except Exception:
-        pass
-    return output
-
-
-def run_agent(agent_id, fn, *args, human_intervention=False, **kwargs):
-    """Run one agent, emit events, optionally pause for human review."""
-    emit({"event": "agent_start", "agentId": agent_id, "agentName": AGENT_NAMES[agent_id],
-          "functionType": AGENT_FUNCTION_TYPES[agent_id], "rules": AGENT_RULES[agent_id]})
-    try:
-        result, stats = fn(*args, **kwargs)
-        summary = _build_summary(agent_id, stats)
-        emit({"event": "agent_log", "agentId": agent_id, "message": summary})
-        llm = agent_explanation(agent_id, summary)
-        emit({"event": "agent_done", "agentId": agent_id, "summary": summary,
-              "stats": stats, "llmExplanation": llm, "output": result})
-
-        if human_intervention:
-            result = wait_for_resume(agent_id, result, stats)
-
-        return result, stats
-    except Exception as e:
-        emit({"event": "agent_fail", "agentId": agent_id, "error": str(e)})
-        raise
-
-
-def _build_summary(agent_id: int, stats: dict) -> str:
-    summaries = {
-        1: lambda s: f"Built {s['total_slots']} slots across {s['exam_days']} exam days. {s['leave_days_excluded']} leave days excluded.",
-        3: lambda s: f"Found {s['total_courses']} courses, {s['shared_courses']} shared across branches.",
-        4: lambda s: f"Assigned {s['assigned']} courses to slots. {s['unassigned']} unassigned.",
-        5: lambda s: f"Moved {s['exams_moved']} exams for gap compliance. Range: {s['final_date_range']}.",
-        6: lambda s: f"Scheduled {s['arrear_slots_assigned']} arrear slots for {s['arrear_students']} students.",
-        2: lambda s: f"Checked {s['students_checked']} students. {s['conflicts_found']} conflicts found.",
-    }
-    return summaries.get(agent_id, lambda s: str(s))(stats)
+def emit(data):
+    """Output JSON line for Node.js stdout parser."""
+    print(json.dumps(data), flush=True)
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", required=True)
-    parser.add_argument("--start", required=True)
-    parser.add_argument("--end", required=True)
+    parser = argparse.ArgumentParser(description="Run Exam Cell Agents Multi-Year Pipeline")
+    parser.add_argument("--sem-type", default="odd", choices=["odd", "even"])
+    parser.add_argument("--year-1", default=None)
+    parser.add_argument("--year-2", default=None)
+    parser.add_argument("--year-3", default=None)
+    parser.add_argument("--year-4", default=None)
+    parser.add_argument("--arrear-file", default=None)
+    parser.add_argument("--start-dates", default="{}")
     parser.add_argument("--leaves", default="[]")
-    parser.add_argument("--difficulty", default="{}")
-    parser.add_argument("--year-session-pattern", default="{}", dest="year_session_pattern")
-    parser.add_argument("--exams-per-branch", default="{}", dest="exams_per_branch")
-    parser.add_argument("--human-intervention", action="store_true", dest="human_intervention")
+    parser.add_argument("--use-groq-ai", action="store_true")
+    parser.add_argument("--human-intervention", action="store_true")
+    
+    # Backwards compatibility fallback args
+    parser.add_argument("--file", default=None)
+    parser.add_argument("--start-date", default="2026-11-02")
+    parser.add_argument("--end-date", default=None)
+    
     args = parser.parse_args()
 
-    leave_days = json.loads(args.leaves)
+    year_files = {
+        "1": args.year_1 or (args.file if "1" in str(args.file) else None),
+        "2": args.year_2 or (args.file if "2" in str(args.file) else None),
+        "3": args.year_3 or (args.file if "3" in str(args.file) else None),
+        "4": args.year_4 or (args.file if "4" in str(args.file) else None),
+    }
 
-    def safe_parse(raw_str):
-        """Parse JSON string, handling double-encoding from FormData."""
-        val = json.loads(raw_str)
-        return json.loads(val) if isinstance(val, str) else val
-
-    difficulty_map = safe_parse(args.difficulty)
-    raw_pattern = safe_parse(args.year_session_pattern)
-    year_session_pattern = {int(k): v for k, v in raw_pattern.items()} if raw_pattern else None
-    exams_per_branch = safe_parse(args.exams_per_branch) or None
-    hi = args.human_intervention
+    # Default fallback if single file uploaded
+    if not any(year_files.values()) and args.file:
+        year_files["2"] = args.file
 
     try:
-        from data_loader import load_students, build_dept_roll_ranges
-        from agent1_calendar import build_calendar
-        from agent3_matcher import build_course_clusters
-        from agent4_harmonizer import assign_regular_slots
-        from agent5_spacing import apply_spacing_rules
-        from agent6_arrear import schedule_arrears
-        from agent2_conflict import check_conflicts
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": f"Import error: {e}"})
-        return
+        start_dates = json.loads(args.start_dates)
+    except Exception:
+        start_dates = {"1": args.start_date, "2": args.start_date, "3": args.start_date, "4": args.start_date}
 
-    MAX_RETRIES = 15
+    try:
+        leave_days = json.loads(args.leaves)
+    except Exception:
+        leave_days = []
+
+    # Select earliest start date
+    valid_dates = [d for d in start_dates.values() if d]
+    start_date = min(valid_dates) if valid_dates else args.start_date
+
     audit_log = []
     agent_stats = {}
 
-    try:
-        enrolments = load_students(args.csv)
-        dept_roll_ranges = build_dept_roll_ranges(enrolments)
-        emit({"event": "agent_log", "agentId": 0, "message": f"Loaded {len(enrolments)} enrolment rows."})
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": f"Data load failed: {e}"})
-        return
+    # 1. Ingest Datasets
+    enrolments = load_multi_year_dataset(year_files, arrear_file=args.arrear_file, sem_type=args.sem_type)
+    dept_roll_ranges = build_dept_roll_ranges(enrolments)
 
-    # ── Agent 1 ──────────────────────────────────────────────────────────────
-    try:
-        open_slots, stats1 = run_agent(1, build_calendar,
-            args.start, args.end, leave_days, year_session_pattern,
-            human_intervention=hi)
-        agent_stats[1] = stats1
-        audit_log.append(_build_summary(1, stats1))
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": str(e)}); return
+    # Agent 1: Calendar Builder
+    emit({
+        "event": "agent_start",
+        "agentId": 1,
+        "agentName": "Calendar & Session Manager",
+        "functionType": "Calendar Builder",
+        "rules": "Rules 1, 8 — max 2 sessions/day, leave days exclusion"
+    })
+    
+    # Dynamic calendar horizon based on total course count
+    reg_count = len({e["course_code"] for e in enrolments if not e.get("is_arrear")})
+    est_days = max(18, (reg_count // 3) + 10)
+    
+    slots1, stats1 = build_calendar(start_date, leave_days=leave_days, estimated_days=est_days)
+    agent_stats[1] = stats1
+    emit({"event": "agent_log", "agentId": 1, "message": f"Generated {len(slots1)} available session slots through {stats1['end_date']}."})
+    emit({"event": "agent_done", "agentId": 1, "summary": f"Built {len(slots1)} slots across {stats1['total_days']} exam days.", "stats": stats1})
 
-    # ── Agent 3 ──────────────────────────────────────────────────────────────
-    try:
-        clusters, stats3 = run_agent(3, build_course_clusters,
-            enrolments, exams_per_branch,
-            human_intervention=hi)
-        agent_stats[3] = stats3
-        audit_log.append(_build_summary(3, stats3))
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": str(e)}); return
+    # Optional Groq AI Course Difficulty Tagging
+    difficulty_map = {}
+    if args.use_groq_ai:
+        all_courses = list({e["course_code"] for e in enrolments})
+        difficulty_map = assess_course_difficulties(all_courses)
 
-    # ── Agent 4 ──────────────────────────────────────────────────────────────
-    try:
-        draft, stats4 = run_agent(4, assign_regular_slots,
-            open_slots, clusters, year_session_pattern, dept_roll_ranges,
-            human_intervention=hi)
-        agent_stats[4] = stats4
-        audit_log.append(_build_summary(4, stats4))
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": str(e)}); return
+    # Agent 3: Common Course Matcher
+    emit({
+        "event": "agent_start",
+        "agentId": 3,
+        "agentName": "Common Course Matcher",
+        "functionType": "Course Cluster Builder",
+        "rules": "Rules 3, 5 — common course clustering & alignment"
+    })
+    clusters, stats3 = build_course_clusters(enrolments)
+    agent_stats[3] = stats3
+    shared_cnt = stats3.get("shared_courses", stats3.get("shared_clusters", 0))
+    total_cnt = stats3.get("total_courses", stats3.get("total_clusters", len(clusters)))
+    emit({"event": "agent_log", "agentId": 3, "message": f"Identified {shared_cnt} shared courses across branches."})
+    emit({"event": "agent_done", "agentId": 3, "summary": f"Clustered {total_cnt} unique course blocks.", "stats": stats3})
 
-    # ── Agent 5 ──────────────────────────────────────────────────────────────
-    try:
-        spaced, stats5 = run_agent(5, apply_spacing_rules,
-            draft, difficulty_map,
-            human_intervention=hi)
-        agent_stats[5] = stats5
-        audit_log.append(_build_summary(5, stats5))
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": str(e)}); return
+    # Agent 4: Regular Stream Harmonizer
+    emit({
+        "event": "agent_start",
+        "agentId": 4,
+        "agentName": "Regular Stream Harmonizer",
+        "functionType": "Slot Harmonizer",
+        "rules": "Rule 4 — regular course slot assignment"
+    })
+    reg_clusters = [c for c in clusters if not c.get("is_arrear")]
+    spaced, stats4 = assign_regular_slots(reg_clusters, slots1)
+    agent_stats[4] = stats4
+    emit({"event": "agent_log", "agentId": 4, "message": f"Harmonized {len(spaced)} regular course slots."})
+    emit({"event": "agent_done", "agentId": 4, "summary": f"Harmonized {len(spaced)} regular exam slots.", "stats": stats4})
 
-    # ── Agent 6 ──────────────────────────────────────────────────────────────
-    try:
-        arrear_enrolments = [r for r in enrolments if r.get("is_arrear")]
-        complete, stats6 = run_agent(6, schedule_arrears,
-            spaced, arrear_enrolments, open_slots, year_session_pattern, enrolments,
-            human_intervention=hi)
-        agent_stats[6] = stats6
-        audit_log.append(_build_summary(6, stats6))
-    except Exception as e:
-        emit({"event": "pipeline_fail", "error": str(e)}); return
+    # Agent 5: Spacing & Difficulty Evaluator
+    emit({
+        "event": "agent_start",
+        "agentId": 5,
+        "agentName": "Spacing & Difficulty Evaluator",
+        "functionType": "Gap & Difficulty Enforcer",
+        "rules": "Rules 1, 6, 9 — min 1-day gap, hard course 2-day buffer post gap"
+    })
+    spaced_opt, stats5 = apply_spacing_rules(spaced, difficulty_map)
+    agent_stats[5] = stats5
+    emit({"event": "agent_log", "agentId": 5, "message": f"Applied difficulty gaps and rest days."})
+    emit({"event": "agent_done", "agentId": 5, "summary": "Enforced rest gaps and hard course buffers.", "stats": stats5})
 
-    # ── Agent 2 with retry ───────────────────────────────────────────────────
-    schedule = complete
-    final_status = "MANUAL_REVIEW_REQUIRED"
-    final_conflicts = []
+    # Agent 6: Arrear Packer
+    emit({
+        "event": "agent_start",
+        "agentId": 6,
+        "agentName": "Arrear & Backlog Scheduler",
+        "functionType": "Arrear Packer",
+        "rules": "Rule 7 — opposite session arrear placement"
+    })
+    arr_enrolments = [e for e in enrolments if e.get("is_arrear")]
+    complete, stats6 = schedule_arrears(spaced_opt, arr_enrolments, slots1, all_enrolments=enrolments)
+    agent_stats[6] = stats6
+    emit({"event": "agent_log", "agentId": 6, "message": f"Placed {stats6['arrear_slots_assigned']} arrear courses."})
+    emit({"event": "agent_done", "agentId": 6, "summary": f"Scheduled {stats6['arrear_slots_assigned']} arrear slots.", "stats": stats6})
 
-    emit({"event": "agent_start", "agentId": 2, "agentName": AGENT_NAMES[2],
-          "functionType": AGENT_FUNCTION_TYPES[2], "rules": AGENT_RULES[2]})
+    # Agent 7 & 2: Conflict Gatekeeper & Cumulative Resolver
+    emit({
+        "event": "agent_start",
+        "agentId": 7,
+        "agentName": "Cumulative Conflict Resolver",
+        "functionType": "Conflict Resolution Expert",
+        "rules": "Rule 2 — zero student clashes"
+    })
+    
+    schedule, final_status, final_conflicts = resolve_cumulative_conflicts(complete, enrolments, slots1)
+    
+    emit({
+        "event": "agent_start",
+        "agentId": 2,
+        "agentName": "Student Conflict Checker",
+        "functionType": "Conflict Gatekeeper",
+        "rules": "Rule 2 — zero student clashes"
+    })
+    emit({"event": "agent_log", "agentId": 2, "message": f"Conflict Gatekeeper verification: {final_status} ({len(final_conflicts)} clashes)."})
+    emit({"event": "agent_done", "agentId": 2, "summary": f"Status: {final_status}.", "stats": {"conflicts": len(final_conflicts)}})
+    emit({"event": "agent_done", "agentId": 7, "summary": f"Final Resolution Status: {final_status}.", "stats": {"conflicts": len(final_conflicts)}})
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        result = check_conflicts(schedule, enrolments)
-        agent_stats[2] = result["stats"]
-        if result["status"] == "PASS":
-            summary = f"0 conflicts after {attempt} check(s). Timetable valid."
-            audit_log.append(summary)
-            emit({"event": "agent_log", "agentId": 2, "message": summary})
-            llm = agent_explanation(2, summary)
-            emit({"event": "agent_done", "agentId": 2, "summary": summary,
-                  "stats": result["stats"], "llmExplanation": llm, "output": []})
-            final_status = "PASS"
-            break
+    # Build unique student list (prioritize real names & regular enrolment records)
+    seen_stus = {}
+    for row in enrolments:
+        rn = row["reg_no"]
+        is_arr = row.get("is_arrear", False)
+        
+        if rn not in seen_stus:
+            seen_stus[rn] = {
+                "reg_no": rn,
+                "name": row["name"],
+                "branch": row["branch"],
+                "semester": row["semester"],
+                "is_arrear_entry": is_arr
+            }
         else:
-            conflict = result["conflicts"][0]
-            msg = (f"Attempt {attempt}: {conflict['reg_no']} — "
-                   f"{conflict['course_a']} vs {conflict['course_b']} on {conflict['date']} {conflict['session']}")
-            audit_log.append(msg)
-            emit({"event": "agent_log", "agentId": 2, "message": msg})
-            final_conflicts = result["conflicts"]
-            try:
-                reg_clusters = [e for e in clusters]  # re-use clusters from agent3
-                reg, _ = assign_regular_slots(open_slots, reg_clusters, year_session_pattern, dept_roll_ranges)
-                reg, _ = apply_spacing_rules(reg, difficulty_map)
-                schedule, _ = schedule_arrears(reg, arrear_enrolments, open_slots, year_session_pattern, enrolments)
-            except Exception:
-                pass
-    else:
-        summary = f"Exceeded {MAX_RETRIES} retries. Manual review required."
-        emit({"event": "agent_log", "agentId": 2, "message": summary})
-        emit({"event": "agent_done", "agentId": 2, "summary": summary,
-              "stats": agent_stats.get(2, {}), "llmExplanation": ask_ollama(
-                  f"Exam conflict unresolved after {MAX_RETRIES} attempts. "
-                  "Explain in 2 sentences what a human exam controller should check."
-              ), "output": final_conflicts})
+            if not is_arr and (seen_stus[rn]["is_arrear_entry"] or seen_stus[rn]["name"].startswith("Student ")):
+                seen_stus[rn] = {
+                    "reg_no": rn,
+                    "name": row["name"],
+                    "branch": row["branch"],
+                    "semester": row["semester"],
+                    "is_arrear_entry": False
+                }
 
-    # ── AI Suggestions ───────────────────────────────────────────────────────
-    suggestions = ai_suggestions(schedule, audit_log)
-    emit({"event": "ai_suggestion", "text": suggestions})
+    students_list = [
+        {
+            "reg_no": s["reg_no"],
+            "name": s["name"],
+            "branch": s["branch"],
+            "semester": s["semester"]
+        } for s in seen_stus.values()
+    ]
 
-    # ── Final result ─────────────────────────────────────────────────────────
+    ai_summary = generate_schedule_summary({"regular_exams": spaced_opt, "arrear_exams": complete, "start_date": start_date, "end_date": stats1['end_date']}, None)
+
     emit({
         "event": "pipeline_done",
         "status": final_status,
@@ -312,6 +230,10 @@ def main():
         "deptRollRanges": dept_roll_ranges,
         "totalExams": len([e for e in schedule if not e.get("is_arrear")]),
         "totalArrears": len([e for e in schedule if e.get("is_arrear")]),
+        "students": students_list,
+        "aiSummary": ai_summary,
+        "startDate": start_date,
+        "endDate": stats1["end_date"]
     })
 
 

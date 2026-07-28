@@ -1,241 +1,372 @@
 """
 generate_mock_students.py
-Generates a realistic mock student CSV for the exam cell system.
+Generates two realistic mock CSV files matching the real college format:
 
-Departments & roll prefixes:
-  CSE  → CS   (e.g. 24CS001)
-  IT   → IT   (e.g. 24IT001)
-  CSBS → CB   (e.g. 24CB001)
-  AIML → AM   (e.g. 24AM001)
-  ECE  → EC   (e.g. 24EC001)
-  EEE  → EE   (e.g. 24EE001)
-  MECH → ME   (e.g. 24ME001)
-  CIVIL→ CV   (e.g. 24CV001)
+  Mock_Regular_Details_AM2026.csv  — regular exam enrolments only
+  Mock_Arrear_Details_AM2026.csv   — arrear exam enrolments only
 
-Semesters: 1 to 8 (4 years × 2 sems)
-Sections per class: 1–3 (randomised per dept/year)
-Students per section: 70–75
-~10% students have 1 arrear (a course from a previous semester)
+Reg No format : 7228 YY BBB RRR
+  7228 = college code
+  YY   = batch year (23/24/25/26)
+  BBB  = dept code (104=CSE, 105=EEE, 106=ECE, 114=MECH, 148=AIML,
+                    149=CSY, 205=IT, 243=AI&DS, 244=CSBS, 134=CCE)
+  RRR  = roll number (001–NNN)
+
+Batch → Regular Semester (Odd semester session):
+  26 → Sem 1   (1st year)
+  25 → Sem 3   (2nd year)
+  24 → Sem 5   (3rd year)
+  23 → Sem 7   (4th year)
+
+Course code format: U23XXNNN  (matches real data like U23MA204, U23CS403)
+
+Mix:
+  ~75% students  → regular only  (appear only in regular file)
+  ~20% students  → regular + arrear (appear in both files)
+  ~5%  students  → arrear only   (appear only in arrear file, rare edge case)
 """
 
 import csv
-import random
 import os
+import random
 
-random.seed(42)
+random.seed(2026)
 
-YEAR = 24  # batch year prefix
-
-DEPARTMENTS = [
-    {"name": "CSE",   "code": "CS", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "AIML",  "code": "AM", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "CCE",   "code": "CC", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "CYSE",  "code": "CY", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "MECH",  "code": "ME", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "ECE",   "code": "EC", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "VLSI",  "code": "VL", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "EEE",   "code": "EE", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "AIDS",  "code": "AD", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "CSBS",  "code": "CB", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "IT",    "code": "IT", "semesters": [1,2,3,4,5,6,7,8]},
-    {"name": "S&H",   "code": "SH", "semesters": [1,2,3,4]},
+# ── Department registry ───────────────────────────────────────────────────────
+DEPTS = [
+    {"name": "CSE",   "code": "104", "batches": ["23","24","25","26"], "sizes": {"23":120,"24":130,"25":140,"26":140}},
+    {"name": "ECE",   "code": "106", "batches": ["23","24","25","26"], "sizes": {"23":100,"24":115,"25":120,"26":120}},
+    {"name": "EEE",   "code": "105", "batches": ["23","24","25","26"], "sizes": {"23":60,"24":70,"25":75,"26":75}},
+    {"name": "MECH",  "code": "114", "batches": ["23","24","25","26"], "sizes": {"23":80,"24":90,"25":100,"26":100}},
+    {"name": "AIML",  "code": "148", "batches": ["23","24","25","26"], "sizes": {"23":70,"24":80,"25":90,"26":90}},
+    {"name": "AI&DS", "code": "243", "batches": ["23","24","25","26"], "sizes": {"23":70,"24":80,"25":90,"26":90}},
+    {"name": "IT",    "code": "205", "batches": ["23","24","25","26"], "sizes": {"23":60,"24":70,"25":75,"26":75}},
+    {"name": "CSBS",  "code": "244", "batches": ["23","24","25","26"], "sizes": {"23":50,"24":60,"25":65,"26":65}},
+    {"name": "CCE",   "code": "134", "batches": ["23","24","25","26"], "sizes": {"23":40,"24":50,"25":55,"26":55}},
 ]
 
-# Courses per department per semester
+BATCH_TO_SEM = {"26": 1, "25": 3, "24": 5, "23": 7}
+
+# ── Course catalogue per dept per semester ────────────────────────────────────
+# Format: (code, name)  — code matches U23XXNNN style
 COURSES = {
-    "CSE": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("CS101","Problem Solving & C","hard"),("EN101","English Communication","easy"),("CS102","Digital Fundamentals","medium")],
-        2: [("MA102","Engineering Mathematics II","medium"),("CS201","Data Structures","hard"),("CS202","Object Oriented Programming","hard"),("EC201","Electronic Circuits","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("CS301","Design & Analysis of Algorithms","hard"),("CS302","Database Management Systems","medium"),("CS303","Computer Organization","medium"),("CS304","Operating Systems","hard")],
-        4: [("CS401","Computer Networks","hard"),("CS402","Software Engineering","medium"),("CS403","Theory of Computation","hard"),("CS404","Microprocessors","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("CS501","Compiler Design","hard"),("CS502","Artificial Intelligence","hard"),("CS503","Web Technologies","medium"),("CS504","Information Security","medium"),("CS505","Mobile Computing","easy")],
-        6: [("CS601","Machine Learning","hard"),("CS602","Cloud Computing","medium"),("CS603","Big Data Analytics","hard"),("CS604","Internet of Things","medium"),("CS605","Distributed Systems","hard")],
-        7: [("CS701","Deep Learning","hard"),("CS702","Natural Language Processing","hard"),("CS703","Blockchain Technology","medium"),("CS704","Project Phase I","easy")],
-        8: [("CS801","Project Phase II","easy"),("CS802","Professional Ethics","easy"),("CS803","Elective I","medium")],
+    # Sem 1 — common across most depts
+    1: {
+        "ALL": [
+            ("U23MA101", "Engineering Mathematics I"),
+            ("U23PH101", "Engineering Physics"),
+            ("U23EN101", "English Communication"),
+            ("U23CS101", "Problem Solving & C Programming"),
+            ("U23EG101", "Engineering Graphics"),
+        ]
     },
-    "IT": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("IT101","Fundamentals of IT","medium"),("EN101","English Communication","easy"),("IT102","Digital Logic","medium")],
-        2: [("MA102","Engineering Mathematics II","medium"),("IT201","Data Structures","hard"),("IT202","Java Programming","hard"),("IT203","Computer Architecture","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("IT301","Algorithms","hard"),("IT302","Database Systems","medium"),("IT303","Operating Systems","hard"),("IT304","Computer Networks","hard")],
-        4: [("IT401","Software Engineering","medium"),("IT402","Web Development","medium"),("IT403","Network Security","hard"),("IT404","Mobile App Development","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("IT501","Cloud Infrastructure","medium"),("IT502","Data Mining","hard"),("IT503","DevOps","medium"),("IT504","UI/UX Design","easy"),("IT505","Cyber Security","hard")],
-        6: [("IT601","Machine Learning","hard"),("IT602","Big Data","hard"),("IT603","Microservices","medium"),("IT604","AR/VR Technologies","medium"),("IT605","IT Project Management","easy")],
-        7: [("IT701","AI Applications","hard"),("IT702","Blockchain","medium"),("IT703","Elective I","medium"),("IT704","Project Phase I","easy")],
-        8: [("IT801","Project Phase II","easy"),("IT802","Professional Ethics","easy"),("IT803","Elective II","medium")],
+    # Sem 3 — dept-specific
+    3: {
+        "CSE":   [("U23MA204","Discrete Mathematics"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23CS491","Operating Systems"),
+                  ("U23IT481","Web Technologies"),("U23AM495","Probability & Statistics")],
+        "ECE":   [("U23MA207","Transform Techniques"),("U23EC403","Analog Circuits"),
+                  ("U23EC421","Signals & Systems"),("U23EC422","Digital Electronics"),
+                  ("U23CS491","Operating Systems"),("U23OCS82","Open Elective-CS")],
+        "EEE":   [("U23MA207","Transform Techniques"),("U23EE403","Electrical Machines I"),
+                  ("U23EE402","Network Theory"),("U23CS303","Digital Logic"),
+                  ("U23CS491","Operating Systems"),("U23OCS82","Open Elective-CS")],
+        "MECH":  [("U23MA208","Numerical Methods"),("U23ME402","Fluid Mechanics"),
+                  ("U23ME403","Manufacturing Processes"),("U23ME481","Strength of Materials"),
+                  ("U23EC381","Basic Electronics"),("U23OAD81","Open Elective-AD")],
+        "AIML":  [("U23MA204","Discrete Mathematics"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23CS491","Operating Systems"),
+                  ("U23AD483","Machine Learning Fundamentals")],
+        "AI&DS": [("U23MA204","Discrete Mathematics"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23EC382","Signals & Systems"),
+                  ("U23CS491","Operating Systems"),("U23AD491","AI Fundamentals")],
+        "IT":    [("U23MA204","Discrete Mathematics"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23EC382","Signals & Systems"),
+                  ("U23CS491","Operating Systems"),("U23IT481","Web Technologies")],
+        "CSBS":  [("U23MA204","Discrete Mathematics"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23EC382","Signals & Systems"),
+                  ("U23CS491","Operating Systems"),("U23MA281","Business Statistics")],
+        "CCE":   [("U23MA207","Transform Techniques"),("U23CS403","Design & Analysis of Algorithms"),
+                  ("U23CS404","Database Management Systems"),("U23EC382","Signals & Systems"),
+                  ("U23CS491","Operating Systems")],
     },
-    "CSBS": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("CB101","Intro to Business Systems","easy"),("EN101","English Communication","easy"),("CB102","Programming Fundamentals","medium")],
-        2: [("MA102","Engineering Mathematics II","medium"),("CB201","Data Structures","hard"),("CB202","Business Analytics","medium"),("CB203","Statistics for Business","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("CB301","Algorithms","hard"),("CB302","Database for Business","medium"),("CB303","ERP Systems","medium"),("CB304","Operating Systems","hard")],
-        4: [("CB401","Business Intelligence","hard"),("CB402","Supply Chain Management","medium"),("CB403","Network Security","hard"),("CB404","E-Commerce","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("CB501","Machine Learning for Business","hard"),("CB502","Data Warehousing","hard"),("CB503","Digital Marketing","easy"),("CB504","Financial Technology","medium"),("CB505","Cloud for Business","medium")],
-        6: [("CB601","AI in Business","hard"),("CB602","Business Process Automation","medium"),("CB603","Predictive Analytics","hard"),("CB604","IT Governance","easy"),("CB605","Elective I","medium")],
-        7: [("CB701","Deep Learning Applications","hard"),("CB702","Strategic IT Management","medium"),("CB703","Elective II","medium"),("CB704","Project Phase I","easy")],
-        8: [("CB801","Project Phase II","easy"),("CB802","Professional Ethics","easy"),("CB803","Elective III","medium")],
+    # Sem 5 — dept-specific
+    5: {
+        "CSE":   [("U23CS405","Computer Networks"),("U23EC383","Microprocessors"),
+                  ("U23CS584","Compiler Design"),("U23CS591","Software Engineering"),
+                  ("U23CC583","Cloud Computing"),("U23IT593","Information Security"),
+                  ("U23EC382","Signals & Systems"),("U23CB593","Blockchain Basics"),
+                  ("U23AD491","AI Fundamentals")],
+        "ECE":   [("U23EC492","Digital Signal Processing"),("U23EC407","VLSI Design"),
+                  ("U23EC408","Communication Systems"),("U23EC482","Embedded Systems"),
+                  ("U23EC514","Microwave Engineering"),("U23EC581","Optical Communication"),
+                  ("U23EC592","Wireless Networks"),("U23EC595","Control Systems")],
+        "EEE":   [("U23EE407","Power Electronics"),("U23EE408","Electric Drives"),
+                  ("U23EE491","Control Systems"),("U23EE582","Power Systems II"),
+                  ("U23EE585","Renewable Energy"),("U23EE409","Smart Grid"),
+                  ("U23OCS85","Open Elective-CS")],
+        "MECH":  [("U23ME405","CAD/CAM"),("U23ME406","Heat Transfer"),
+                  ("U23ME407","Machine Design"),("U23ME522","Robotics"),
+                  ("U23AM499","Operations Research"),("U23ME484","Finite Element Analysis"),
+                  ("U23ME592","Automobile Engineering"),("U23ME594","Industrial Engineering"),
+                  ("U23ME541","Mechatronics")],
+        "AIML":  [("U23AD511","Deep Learning"),("U23AM492","Natural Language Processing"),
+                  ("U23AD484","Computer Vision"),("U23IT484","IoT Systems"),
+                  ("U23EC382","Signals & Systems"),("U23CB593","Blockchain Basics"),
+                  ("U23EC384","Microprocessors"),("U23CS522","Generative AI")],
+        "AI&DS": [("U23AD401","Machine Learning"),("U23AD484","Computer Vision"),
+                  ("U23IT484","IoT Systems"),("U23AM491","Data Analytics"),
+                  ("U23CB593","Blockchain Basics"),("U23EC384","Microprocessors")],
+        "IT":    [("U23IT403","Network Security"),("U23EC383","Microprocessors"),
+                  ("U23OME81","Open Elective-ME"),("U23AM495","Probability & Statistics"),
+                  ("U23CB593","Blockchain Basics"),("U23AD491","AI Fundamentals")],
+        "CSBS":  [("U23CB582","Business Intelligence"),("U23CS405","Computer Networks"),
+                  ("U23OEC84","Open Elective-EC"),("U23IT402","Web Development"),
+                  ("U23AM495","Probability & Statistics"),("U23CB593","Blockchain Basics"),
+                  ("U23IT481","Web Technologies"),("U23CB514","FinTech")],
+        "CCE":   [("U23CC401","Embedded Systems"),("U23CC483","VLSI Design"),
+                  ("U23IT402","Web Development"),("U23AM498","Operations Research"),
+                  ("U23CB593","Blockchain Basics"),("U23AD491","AI Fundamentals")],
     },
-    "AIML": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("AM101","Intro to AI & ML","medium"),("EN101","English Communication","easy"),("AM102","Python Programming","medium")],
-        2: [("MA102","Engineering Mathematics II","medium"),("AM201","Data Structures","hard"),("AM202","Linear Algebra for ML","hard"),("AM203","Statistics & Probability","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("AM301","Machine Learning Fundamentals","hard"),("AM302","Database Systems","medium"),("AM303","Computer Vision Basics","hard"),("AM304","Operating Systems","hard")],
-        4: [("AM401","Deep Learning","hard"),("AM402","Natural Language Processing","hard"),("AM403","Reinforcement Learning","hard"),("AM404","Big Data Technologies","hard"),("MA401","Probability & Statistics","medium")],
-        5: [("AM501","Advanced Deep Learning","hard"),("AM502","AI Ethics","easy"),("AM503","Generative AI","hard"),("AM504","MLOps","medium"),("AM505","Computer Networks","medium")],
-        6: [("AM601","Large Language Models","hard"),("AM602","AI in Healthcare","medium"),("AM603","Autonomous Systems","hard"),("AM604","Edge AI","medium"),("AM605","Elective I","medium")],
-        7: [("AM701","Research Methodology","medium"),("AM702","AI Product Development","medium"),("AM703","Elective II","medium"),("AM704","Project Phase I","easy")],
-        8: [("AM801","Project Phase II","easy"),("AM802","Professional Ethics","easy"),("AM803","Elective III","medium")],
-    },
-    "ECE": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("EC101","Basic Electronics","medium"),("EN101","English Communication","easy"),("EC102","Circuit Theory","hard")],
-        2: [("MA102","Engineering Mathematics II","medium"),("EC201","Electronic Devices","hard"),("EC202","Signals & Systems","hard"),("EC203","Network Analysis","hard"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("EC301","Digital Electronics","hard"),("EC302","Analog Circuits","hard"),("EC303","Electromagnetic Theory","hard"),("EC304","Microprocessors","medium")],
-        4: [("EC401","Communication Systems","hard"),("EC402","VLSI Design","hard"),("EC403","Control Systems","hard"),("EC404","Antenna Theory","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("EC501","Digital Signal Processing","hard"),("EC502","Wireless Communication","hard"),("EC503","Embedded Systems","medium"),("EC504","Optical Communication","medium"),("EC505","Microwave Engineering","hard")],
-        6: [("EC601","IoT Systems","medium"),("EC602","5G Technologies","hard"),("EC603","FPGA Design","hard"),("EC604","Radar Systems","hard"),("EC605","Elective I","medium")],
-        7: [("EC701","Advanced Communication","hard"),("EC702","Satellite Communication","medium"),("EC703","Elective II","medium"),("EC704","Project Phase I","easy")],
-        8: [("EC801","Project Phase II","easy"),("EC802","Professional Ethics","easy"),("EC803","Elective III","medium")],
-    },
-    "EEE": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("EE101","Basic Electrical Engineering","medium"),("EN101","English Communication","easy"),("EE102","Circuit Analysis","hard")],
-        2: [("MA102","Engineering Mathematics II","medium"),("EE201","Electrical Machines I","hard"),("EE202","Network Theory","hard"),("EE203","Electronic Devices","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("EE301","Electrical Machines II","hard"),("EE302","Power Systems I","hard"),("EE303","Control Systems","hard"),("EE304","Measurements","medium")],
-        4: [("EE401","Power Systems II","hard"),("EE402","Power Electronics","hard"),("EE403","Microprocessors","medium"),("EE404","High Voltage Engineering","hard"),("MA401","Probability & Statistics","medium")],
-        5: [("EE501","Electric Drives","hard"),("EE502","Renewable Energy","medium"),("EE503","Digital Signal Processing","hard"),("EE504","Smart Grid","medium"),("EE505","Switchgear & Protection","hard")],
-        6: [("EE601","FACTS Devices","hard"),("EE602","Energy Audit","medium"),("EE603","PLC & SCADA","medium"),("EE604","Elective I","medium"),("EE605","Power Quality","hard")],
-        7: [("EE701","Advanced Power Systems","hard"),("EE702","Electric Vehicles","medium"),("EE703","Elective II","medium"),("EE704","Project Phase I","easy")],
-        8: [("EE801","Project Phase II","easy"),("EE802","Professional Ethics","easy"),("EE803","Elective III","medium")],
-    },
-    "MECH": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("ME101","Engineering Graphics","medium"),("EN101","English Communication","easy"),("ME102","Workshop Practice","easy")],
-        2: [("MA102","Engineering Mathematics II","medium"),("ME201","Engineering Mechanics","hard"),("ME202","Thermodynamics","hard"),("ME203","Material Science","medium"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("ME301","Fluid Mechanics","hard"),("ME302","Manufacturing Processes","medium"),("ME303","Strength of Materials","hard"),("ME304","Kinematics of Machinery","hard")],
-        4: [("ME401","Heat Transfer","hard"),("ME402","Machine Design","hard"),("ME403","Dynamics of Machinery","hard"),("ME404","Metrology","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("ME501","CAD/CAM","medium"),("ME502","Refrigeration & AC","medium"),("ME503","Finite Element Analysis","hard"),("ME504","Industrial Engineering","medium"),("ME505","Robotics","hard")],
-        6: [("ME601","Automobile Engineering","medium"),("ME602","Mechatronics","hard"),("ME603","Operations Research","hard"),("ME604","Elective I","medium"),("ME605","Non-Destructive Testing","medium")],
-        7: [("ME701","Advanced Manufacturing","hard"),("ME702","Product Design","medium"),("ME703","Elective II","medium"),("ME704","Project Phase I","easy")],
-        8: [("ME801","Project Phase II","easy"),("ME802","Professional Ethics","easy"),("ME803","Elective III","medium")],
-    },
-    "CIVIL": {
-        1: [("MA101","Engineering Mathematics I","medium"),("PH101","Engineering Physics","easy"),("CV101","Engineering Drawing","medium"),("EN101","English Communication","easy"),("CV102","Building Materials","easy")],
-        2: [("MA102","Engineering Mathematics II","medium"),("CV201","Surveying","medium"),("CV202","Mechanics of Solids","hard"),("CV203","Fluid Mechanics I","hard"),("EN102","Technical Writing","easy")],
-        3: [("MA301","Discrete Mathematics","hard"),("CV301","Structural Analysis I","hard"),("CV302","Fluid Mechanics II","hard"),("CV303","Soil Mechanics","hard"),("CV304","Concrete Technology","medium")],
-        4: [("CV401","Structural Analysis II","hard"),("CV402","Foundation Engineering","hard"),("CV403","Transportation Engineering","medium"),("CV404","Environmental Engineering","medium"),("MA401","Probability & Statistics","medium")],
-        5: [("CV501","Design of RC Structures","hard"),("CV502","Water Resources Engineering","hard"),("CV503","Construction Management","medium"),("CV504","Remote Sensing & GIS","medium"),("CV505","Earthquake Engineering","hard")],
-        6: [("CV601","Design of Steel Structures","hard"),("CV602","Urban Planning","medium"),("CV603","Pavement Design","medium"),("CV604","Elective I","medium"),("CV605","Quantity Surveying","easy")],
-        7: [("CV701","Advanced Structural Design","hard"),("CV702","Smart Infrastructure","medium"),("CV703","Elective II","medium"),("CV704","Project Phase I","easy")],
-        8: [("CV801","Project Phase II","easy"),("CV802","Professional Ethics","easy"),("CV803","Elective III","medium")],
+    # Sem 7 — dept-specific
+    7: {
+        "CSE":   [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23IT483","Advanced Algorithms"),("U23CS531","Deep Learning"),
+                  ("U23OEC84","Open Elective-EC")],
+        "ECE":   [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23EC411","Advanced Communication"),("U23EC483","Satellite Systems"),
+                  ("U23EC551","5G Technologies"),("U23OME01","Open Elective-ME")],
+        "EEE":   [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23EE413","Advanced Power Systems"),("U23EE582","Power Quality"),
+                  ("U23EE514","Electric Vehicles"),("U23EE544","Smart Grid Advanced"),
+                  ("U23EE522","FACTS Devices"),("U23EE524","Energy Audit")],
+        "MECH":  [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23CS588","Industry 4.0"),("U23EE524","Energy Audit"),
+                  ("U23AM584","Advanced Manufacturing"),("U23ME410","Product Design"),
+                  ("U23ME552","Tribology"),("U23AM586","Operations Management"),
+                  ("U23ME541","Mechatronics"),("U23CS521","AI for Engineers"),
+                  ("U23EE522","FACTS Devices"),("U23AM581","Supply Chain"),
+                  ("U23ME592","Automobile Engineering"),("U23ME594","Industrial Engineering")],
+        "AIML":  [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23CS522","Generative AI"),("U23IT483","Advanced Algorithms"),
+                  ("U23OME07","Open Elective-ME"),("U23AD511","Deep Learning")],
+        "AI&DS": [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23AM586","Operations Management"),("U23OME06","Open Elective-ME"),
+                  ("U23AD511","Deep Learning")],
+        "IT":    [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23CB532","Blockchain Applications"),("U23OME07","Open Elective-ME"),
+                  ("U23IT523","Advanced Networks")],
+        "CSBS":  [("U23CB582","Business Intelligence"),("U23CB403","Strategic IT"),
+                  ("U23CB491","Data Science"),("U23CB514","FinTech"),
+                  ("U23OME07","Open Elective-ME")],
+        "CCE":   [("U23CB103","Project Phase I"),("U23CB104","Professional Ethics"),
+                  ("U23CC583","Advanced Embedded"),("U23OME06","Open Elective-ME")],
     },
 }
 
-# Sections per dept per year (1–3)
-SECTIONS = {
-    "CSE":   {1:3, 2:3, 3:2, 4:2, 5:2, 6:1, 7:1, 8:1},
-    "IT":    {1:2, 2:2, 3:2, 4:1, 5:1, 6:1, 7:1, 8:1},
-    "CSBS":  {1:2, 2:2, 3:1, 4:1, 5:1, 6:1, 7:1, 8:1},
-    "AIML":  {1:2, 2:2, 3:2, 4:1, 5:1, 6:1, 7:1, 8:1},
-    "ECE":   {1:3, 2:3, 3:2, 4:2, 5:1, 6:1, 7:1, 8:1},
-    "EEE":   {1:2, 2:2, 3:1, 4:1, 5:1, 6:1, 7:1, 8:1},
-    "MECH":  {1:3, 2:3, 3:2, 4:2, 5:1, 6:1, 7:1, 8:1},
-    "CIVIL": {1:2, 2:2, 3:1, 4:1, 5:1, 6:1, 7:1, 8:1},
+# Arrear courses: older semester courses a student might have failed
+# NOTE: Sem 1 arrears only assigned to Sem 3+ students (not Sem 7) to avoid
+# same-day clashes between Sem 1 regular and Sem 1 arrear exams.
+ARREAR_POOL = {
+    "CSE":   {3: ["U23MA204","U23CS403","U23CS404","U23CS491"],
+              5: ["U23CS405","U23CS584","U23CS591"]},
+    "ECE":   {3: ["U23MA207","U23EC403","U23EC421","U23EC422"],
+              5: ["U23EC492","U23EC407","U23EC408"]},
+    "EEE":   {3: ["U23MA207","U23EE403","U23EE402"],
+              5: ["U23EE407","U23EE408","U23EE491"]},
+    "MECH":  {3: ["U23MA208","U23ME402","U23ME403"],
+              5: ["U23ME405","U23ME406","U23ME407"]},
+    "AIML":  {3: ["U23MA204","U23CS403","U23CS404"],
+              5: ["U23AD511","U23AM492","U23AD484"]},
+    "AI&DS": {3: ["U23MA204","U23CS403","U23CS404"],
+              5: ["U23AD401","U23AD484","U23AM491"]},
+    "IT":    {3: ["U23MA204","U23CS403","U23CS404"],
+              5: ["U23IT403","U23EC383"]},
+    "CSBS":  {3: ["U23MA204","U23CS403","U23CS404"],
+              5: ["U23CB582","U23CS405"]},
+    "CCE":   {3: ["U23MA207","U23CS403","U23CS404"],
+              5: ["U23CC401","U23CC483"]},
 }
 
-FIRST_NAMES = [
-    "Aarav","Aditya","Akash","Ananya","Anjali","Arjun","Aryan","Bhavya","Deepak","Deepika",
-    "Divya","Ganesh","Harini","Harish","Ishaan","Ishita","Karthik","Kavya","Keerthana","Kishore",
-    "Krithika","Kumar","Lakshmi","Lavanya","Manoj","Meena","Mohan","Nandini","Naveen","Nithya",
-    "Pooja","Pradeep","Pranav","Priya","Rahul","Raja","Rajesh","Ramya","Ravi","Rohit",
-    "Sanjay","Saravanan","Sathish","Shruti","Sindhu","Sneha","Suresh","Swetha","Tamil","Tharun",
-    "Usha","Vaishnavi","Vijay","Vikram","Vinay","Vishal","Yamini","Yuvan","Zara","Arun",
-    "Balaji","Chandru","Dhanush","Eswari","Fathima","Gokul","Hema","Indira","Jayesh","Kiran",
-    "Logesh","Madhan","Nandhini","Oviya","Pavithra","Ragul","Saranya","Tamilarasi","Uma","Venkat",
+# Sem 1 arrear pool — only for Sem 3 and Sem 5 students
+ARREAR_POOL_SEM1 = {
+    "CSE":   ["U23MA101","U23CS101","U23PH101"],
+    "ECE":   ["U23MA101","U23PH101","U23EN101"],
+    "EEE":   ["U23MA101","U23PH101","U23EN101"],
+    "MECH":  ["U23MA101","U23PH101","U23EN101"],
+    "AIML":  ["U23MA101","U23CS101","U23PH101"],
+    "AI&DS": ["U23MA101","U23CS101","U23PH101"],
+    "IT":    ["U23MA101","U23CS101","U23PH101"],
+    "CSBS":  ["U23MA101","U23CS101","U23PH101"],
+    "CCE":   ["U23MA101","U23PH101","U23EN101"],
+}
+
+NAMES = [
+    "Aarav Kumar","Aditya Sharma","Akash Patel","Ananya Singh","Anjali Reddy",
+    "Arjun Nair","Aryan Pillai","Bhavya Iyer","Deepak Menon","Deepika Krishnan",
+    "Divya Rajan","Ganesh Subramaniam","Harini Murugan","Harish Selvam","Ishaan Pandian",
+    "Ishita Arumugam","Karthik Natarajan","Kavya Venkatesh","Keerthana Balasubramanian","Kishore Ramasamy",
+    "Krithika Gopal","Lakshmi Sundar","Lavanya Anand","Manoj Chandrasekaran","Meena Raghavan",
+    "Mohan Srinivasan","Nandini Muthukumar","Naveen Palaniswamy","Nithya Duraisamy","Pooja Thangavel",
+    "Pradeep Kumar","Pranav Sharma","Priya Patel","Rahul Singh","Raja Reddy",
+    "Rajesh Nair","Ramya Pillai","Ravi Iyer","Rohit Menon","Sanjay Krishnan",
+    "Saravanan Rajan","Sathish Subramaniam","Shruti Murugan","Sindhu Selvam","Sneha Pandian",
+    "Suresh Arumugam","Swetha Natarajan","Tamil Venkatesh","Tharun Balasubramanian","Usha Ramasamy",
+    "Vaishnavi Gopal","Vijay Sundar","Vikram Anand","Vinay Chandrasekaran","Vishal Raghavan",
+    "Yamini Srinivasan","Yuvan Muthukumar","Arun Palaniswamy","Balaji Duraisamy","Chandru Thangavel",
+    "Dhanush Kumar","Eswari Sharma","Fathima Patel","Gokul Singh","Hema Reddy",
+    "Indira Nair","Jayesh Pillai","Kiran Iyer","Logesh Menon","Madhan Krishnan",
+    "Nandhini Rajan","Oviya Subramaniam","Pavithra Murugan","Ragul Selvam","Saranya Pandian",
+    "Tamilarasi Arumugam","Uma Natarajan","Venkat Venkatesh","Abinivesh Mayilsamy","Sriram Govindan",
 ]
 
-LAST_NAMES = [
-    "Kumar","Sharma","Patel","Singh","Reddy","Nair","Pillai","Iyer","Menon","Krishnan",
-    "Rajan","Subramaniam","Murugan","Selvam","Pandian","Arumugam","Natarajan","Venkatesh","Balasubramanian","Ramasamy",
-    "Gopal","Sundar","Anand","Chandrasekaran","Raghavan","Srinivasan","Muthukumar","Palaniswamy","Duraisamy","Thangavel",
-]
 
-def make_name():
-    return f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
+def make_reg_no(batch: str, dept_code: str, roll: int) -> str:
+    return f"7228{batch}{dept_code}{roll:03d}"
 
-def make_roll(dept_code, year, section_idx, student_idx):
-    # Format: 24CS033  (year + dept_code + 3-digit number)
-    # Section A: 001-075, B: 076-150, C: 151-225
-    base = section_idx * 75 + student_idx + 1
-    return f"{year}{dept_code}{base:03d}"
+
+def get_courses_for_sem(dept: str, sem: int) -> list:
+    if sem == 1:
+        return COURSES[1]["ALL"]
+    return COURSES.get(sem, {}).get(dept, [])
+
 
 def generate():
-    rows = []
-    arrear_rows = []
+    regular_rows = []   # goes to Mock_Regular_Details_AM2026.csv
+    arrear_rows = []    # goes to Mock_Arrear_Details_AM2026.csv
 
-    for dept in DEPARTMENTS:
-        dname = dept["name"]
-        dcode = dept["code"]
-        courses_map = COURSES[dname]
-        sections_map = SECTIONS[dname]
+    sl_reg = 1
+    sl_arr = 1
 
-        for sem in dept["semesters"]:
-            # Derive year from semester (sem 1-2 = year 1, etc.)
-            acad_year = (sem + 1) // 2
-            num_sections = sections_map.get(acad_year, 1)
-            courses = courses_map.get(sem, [])
+    for dept_info in DEPTS:
+        dept = dept_info["name"]
+        dept_code = dept_info["code"]
 
-            for sec_idx in range(num_sections):
-                section_label = chr(65 + sec_idx)  # A, B, C
-                num_students = random.randint(70, 75)
+        for batch in dept_info["batches"]:
+            reg_sem = BATCH_TO_SEM[batch]
+            n_students = dept_info["sizes"][batch]
 
-                for stu_idx in range(num_students):
-                    roll = make_roll(dcode, YEAR, sec_idx, stu_idx)
-                    name = make_name()
+            # Assign names (cycle through pool)
+            for roll in range(1, n_students + 1):
+                reg_no = make_reg_no(batch, dept_code, roll)
+                name = NAMES[(roll - 1) % len(NAMES)]
 
-                    for (code, cname, diff) in courses:
-                        rows.append({
-                            "name": name,
-                            "reg_no": roll,
-                            "course_code": code,
-                            "course_name": cname,
-                            "semester": sem,
-                            "branch": dname,
-                            "section": section_label,
-                            "difficulty": diff,
-                        })
+                # ── Regular courses for this student ──────────────────────
+                courses = get_courses_for_sem(dept, reg_sem)
+                for (code, cname) in courses:
+                    regular_rows.append({
+                        "Sl. No.": sl_reg,
+                        "Branch": dept,
+                        "Sem": reg_sem,
+                        "Code": code,
+                        "Register Number": reg_no,
+                        "Name": name,
+                    })
+                    sl_reg += 1
 
-                    # ~10% chance of 1 arrear from previous semester
-                    if sem > 1 and random.random() < 0.10:
-                        prev_sem = sem - 1
-                        prev_courses = courses_map.get(prev_sem, [])
-                        if prev_courses:
-                            arrear_course = random.choice(prev_courses)
+                # ── Arrear assignment ─────────────────────────────────────
+                # ~75% students: regular only → no arrear
+                # ~20% students: regular + arrear (1–2 arrear courses)
+                # ~5%  students: arrear only (skip regular, add arrear)
+                rng = random.random()
+
+                if rng < 0.02:
+                    # Arrear-only student (~2%)
+                    regular_rows = [r for r in regular_rows if r["Register Number"] != reg_no]
+                    sl_reg -= len(courses)
+
+                    arr_sem_options = [s for s in ARREAR_POOL.get(dept, {}) if s < reg_sem]
+                    # Add Sem 1 arrear option only for Sem 3 and Sem 5 students
+                    if reg_sem in (3, 5) and dept in ARREAR_POOL_SEM1:
+                        arr_sem_options = [1] + arr_sem_options
+                    if arr_sem_options:
+                        arr_sem = random.choice(arr_sem_options)
+                        pool = ARREAR_POOL_SEM1[dept] if arr_sem == 1 else ARREAR_POOL[dept][arr_sem]
+                        n_arr = random.randint(1, min(2, len(pool)))
+                        for code in random.sample(pool, n_arr):
                             arrear_rows.append({
-                                "name": name,
-                                "reg_no": roll,
-                                "course_code": arrear_course[0],
-                                "course_name": arrear_course[1],
-                                "semester": prev_sem,
-                                "branch": dname,
-                                "section": section_label,
-                                "difficulty": arrear_course[2],
+                                "Sl. No.": sl_arr,
+                                "Branch": dept,
+                                "Sem": arr_sem,
+                                "Code": code,
+                                "Register Number": reg_no,
+                                "Name": name,
                             })
+                            sl_arr += 1
 
-    all_rows = rows + arrear_rows
-    print(f"Total rows: {len(all_rows):,}  (regular: {len(rows):,}, arrears: {len(arrear_rows):,})")
-    return all_rows
+                elif rng < 0.10:  # ~8% regular + arrear
+                    # Regular + arrear student
+                    arr_sem_options = [s for s in ARREAR_POOL.get(dept, {}) if s < reg_sem]
+                    # Add Sem 1 arrear option only for Sem 3 and Sem 5 students
+                    if reg_sem in (3, 5) and dept in ARREAR_POOL_SEM1:
+                        arr_sem_options = [1] + arr_sem_options
+                    if arr_sem_options:
+                        arr_sem = random.choice(arr_sem_options)
+                        pool = ARREAR_POOL_SEM1[dept] if arr_sem == 1 else ARREAR_POOL[dept][arr_sem]
+                        n_arr = random.randint(1, min(2, len(pool)))
+                        for code in random.sample(pool, n_arr):
+                            arrear_rows.append({
+                                "Sl. No.": sl_arr,
+                                "Branch": dept,
+                                "Sem": arr_sem,
+                                "Code": code,
+                                "Register Number": reg_no,
+                                "Name": name,
+                            })
+                            sl_arr += 1
+                # else: regular-only (no arrear added)
+
+    return regular_rows, arrear_rows
+
+
+def write_csv(rows: list, path: str, fields: list):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"  Saved {len(rows):,} rows -> {os.path.basename(path)}")
+
 
 def main():
-    out_path = os.path.join(os.path.dirname(__file__), "mock_students.csv")
-    data = generate()
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+    out_dir = os.path.abspath(out_dir)
 
-    fieldnames = ["name","reg_no","course_code","course_name","semester","branch","section","difficulty"]
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(data)
+    print("Generating mock dataset...")
+    regular_rows, arrear_rows = generate()
 
-    print(f"✅ Saved to: {out_path}")
+    # Count unique students
+    reg_students  = len({r["Register Number"] for r in regular_rows})
+    arr_students  = len({r["Register Number"] for r in arrear_rows})
+    both_students = len(
+        {r["Register Number"] for r in regular_rows} &
+        {r["Register Number"] for r in arrear_rows}
+    )
+
+    print(f"\n  Regular rows   : {len(regular_rows):,}")
+    print(f"  Arrear rows    : {len(arrear_rows):,}")
+    print(f"  Regular-only students : {reg_students - both_students:,}")
+    print(f"  Arrear-only students  : {arr_students - both_students:,}")
+    print(f"  Both (reg+arrear)     : {both_students:,}")
+    print(f"  Total unique students : {len({r['Register Number'] for r in regular_rows + arrear_rows}):,}")
+
+    fields = ["Sl. No.", "Branch", "Sem", "Code", "Register Number", "Name"]
+
+    reg_path = os.path.join(out_dir, "Mock_Regular_Details_AM2026.csv")
+    arr_path = os.path.join(out_dir, "Mock_Arrear_Details_AM2026.csv")
+
+    print()
+    write_csv(regular_rows, reg_path, fields)
+    write_csv(arrear_rows,  arr_path, fields)
+    print("\nDone.")
 
     # Print sample
-    print("\nSample rows:")
-    for row in data[:5]:
-        print(f"  {row['reg_no']}  {row['name']:<28}  Sem {row['semester']}  {row['course_code']}  {row['course_name']}")
+    print("\nSample Regular rows:")
+    for r in regular_rows[:4]:
+        print(f"  {r['Register Number']}  Sem {r['Sem']}  {r['Code']}  {r['Name']}")
+    print("\nSample Arrear rows:")
+    for r in arrear_rows[:4]:
+        print(f"  {r['Register Number']}  Sem {r['Sem']}  {r['Code']}  {r['Name']}")
+
 
 if __name__ == "__main__":
     main()

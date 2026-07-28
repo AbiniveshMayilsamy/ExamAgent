@@ -1,382 +1,378 @@
 """
-data_loader.py — Loads student/course enrolment data.
-Derives: branch, is_arrear, year, credits, roll_range per dept.
+data_loader.py — Multi-Year and Arrear Data Ingestion & Harmonization Engine.
+
+Handles multi-sheet Excel (.xlsx/.xls), CSV, and JSON files across 1st to 4th Year.
+Features:
+- Pure-python zipfile XML parsing for zero-dependency Excel reading.
+- Dynamic sheet department inferencing (e.g. 'III CYS' sheet missing Dept column).
+- Authoritative 12-digit Register Number department mapping (REG_DEPT_MAP).
+- Lateral Entry (LE) rule enforcement (LE students joined in Sem 3, Sem 1/2 arrears discarded).
+- Active scheduled year filtering (only process arrears for loaded active years).
+- Department normalization ('AI&DS' -> 'AIDS').
+- Student Master Database building (RegNo / RollNo indexing).
+- Arrear file harmonization & deduplication.
 """
-import csv
-import json
 import re
+import json
+import csv
+import zipfile
+import xml.etree.ElementTree as ET
+from collections import defaultdict
 from config import sem_to_year
 
-try:
-    import pandas as pd
-except Exception:
-    pd = None
+KNOWN_DEPTS = ["AIDS", "AIML", "CCE", "CSBS", "CYS", "ECE", "EEE", "CSE", "IT", "MECH"]
+
+# Official Anna University / Sri Eshwar 3-digit department code map
+REG_DEPT_MAP = {
+    '104': 'CSE',
+    '105': 'EEE',
+    '106': 'ECE',
+    '114': 'MECH',
+    '134': 'CCE',
+    '148': 'AIML',
+    '149': 'CYS',
+    '205': 'IT',
+    '243': 'AIDS',
+    '244': 'CSBS',
+}
+
+# Regex for student roll numbers (e.g. 25CC002, 25AD001, 24EE001, IC26BTecL0019)
+ROLL_NO_PATTERN = re.compile(r'^(26|25|24|23|22|21|20|19)(AD|CS|CC|EC|EE|ME|IT|CB|SY|AM|VL|CY)[A-Z0-9]{2,6}$', re.IGNORECASE)
+
+def normalize_dept(dept_str: str) -> str:
+    """Normalize department strings using exact token matching (prevents substring matching bugs)."""
+    if not dept_str:
+        return "UNKNOWN"
+    clean = str(dept_str).strip().upper().replace("&", "")
+    
+    if clean in ["AIDS", "AIDS A", "AIDS B", "AI&DS", "ARTIFICIAL INTELLIGENCE AND DATA SCIENCE", "ARTIFICIAL INTELLIGENCE AND DATA"]:
+        return "AIDS"
+    if clean in ["AIML", "AIML A", "AIML B", "AI-ML", "MACHINE LEARNING"]:
+        return "AIML"
+    if clean in ["CSBS", "BUSINESS SYSTEMS"]:
+        return "CSBS"
+    if clean in ["CYS", "CYSE", "CYBER", "CYBER SECURITY"]:
+        return "CYS"
+    if clean in ["CCE", "COMPUTER AND COMMUNICATION ENGINEERING"]:
+        return "CCE"
+    if clean in ["CSE", "CSE A", "CSE B", "CSE C", "COMPUTER SCIENCE"]:
+        return "CSE"
+    if clean in ["ECE", "ECE A", "ECE B", "ECE C", "ELECTRONICS AND COMMUNICATION ENGINEERING"]:
+        return "ECE"
+    if clean in ["EEE", "ELECTRICAL AND ELECTRONICS ENGINEERING"]:
+        return "EEE"
+    if clean in ["MECH", "MECHANICAL ENGINEERING"]:
+        return "MECH"
+    if clean in ["IT", "INFORMATION TECHNOLOGY"]:
+        return "IT"
+        
+    return clean
 
 
-def _parse_branch(reg_no: str) -> str:
-    """Extract branch code from reg_no, e.g. '722824104001' -> '104' or 'CS'."""
-    match = re.search(r"[A-Z]{2,6}", reg_no)
-    if match:
-        return match.group(0)
-    # Check 12-digit format e.g., 722823104001 (branch code digits 6..9)
-    clean = str(reg_no).strip()
-    if clean.startswith("7228") and len(clean) >= 9:
-        return clean[6:9]
-    return "UNKNOWN"
+def is_valid_course_code(item: str) -> bool:
+    """Check if item is a legitimate course code and NOT a student roll number or S.No."""
+    if not item or len(item) < 6 or len(item) > 10:
+        return False
+    item_upper = item.upper()
+    if ROLL_NO_PATTERN.match(item_upper) or item_upper.startswith('IC'):
+        return False
+    if item.isdigit():
+        return False
+    if item_upper.startswith('U1') or item_upper.startswith('U2') or item_upper.startswith('U3'):
+        return True
+    if re.match(r'^(19|20|21|22|23|24|25)[A-Z]{2,4}\d{3}', item_upper):
+        return True
+    return False
+
+
+def get_dept_from_reg_no(reg_no: str) -> str:
+    """Extract department directly from 12-digit Anna University Register Number."""
+    if reg_no and len(reg_no) == 12 and reg_no.isdigit():
+        code = reg_no[6:9]
+        return REG_DEPT_MAP.get(code, None)
+    return None
+
+
+def is_lateral_entry_student(roll_no: str, reg_no: str) -> bool:
+    """Check if a student is a Lateral Entry (LE) student (joined directly in 2nd year / Sem 3)."""
+    r_str = str(roll_no or '').upper()
+    p_str = str(reg_no or '').upper()
+    if r_str.startswith('IC') or 'BTECL' in r_str or 'BEL' in r_str:
+        return True
+    if len(r_str) >= 5 and r_str[-3] == '3' and r_str[-2:].isdigit():
+        return True
+    if len(p_str) == 12 and p_str.isdigit() and p_str[9] == '3':
+        return True
+    return False
 
 
 def _parse_reg_no_info(reg_no: str) -> dict:
-    """
-    Extract college code and batch year from reg_no.
-    Standard reg_no format: '7228YY...' (e.g. 722823104001)
-      - College code: '7228'
-      - Batch code: '23', '24', '25', '26'
-    Maps batch to regular semester:
-      '26' -> Sem 1 (1st Year)
-      '25' -> Sem 3 (2nd Year)
-      '24' -> Sem 5 (3rd Year)
-      '23' -> Sem 7 (4th Year)
-    """
-    clean = str(reg_no).strip()
-    batch = "25"
-    if clean.startswith("7228") and len(clean) >= 6:
-        batch = clean[4:6]
-    elif clean.startswith("202") and len(clean) >= 6:
-        batch = clean[2:4]
-    elif len(clean) >= 2 and clean[:2].isdigit():
-        batch = clean[:2]
-
-    batch_map = {
-        "26": 1,
-        "25": 3,
-        "24": 5,
-        "23": 7,
-    }
-    regular_sem = batch_map.get(batch, None)
+    """Parse batch, department, and regular semester from a 12-digit register number."""
+    if not reg_no or len(reg_no) != 12 or not reg_no.isdigit():
+        return {"batch": "26", "branch": "GENERAL", "regular_sem": 1}
+    batch = reg_no[4:6]
+    dept_code = reg_no[6:9]
+    branch = REG_DEPT_MAP.get(dept_code, "GENERAL")
+    batch_sem_map = {"26": 1, "25": 3, "24": 5, "23": 7}
+    regular_sem = batch_sem_map.get(batch, 1)
     return {
         "batch": batch,
-        "regular_sem": regular_sem,
+        "branch": branch,
+        "regular_sem": regular_sem
     }
 
 
-def _roll_range(reg_nos: list[str]) -> str:
-    """Return 'MIN–MAX' roll range string from a list of reg_nos."""
-    if not reg_nos:
-        return ""
-    sorted_rolls = sorted(reg_nos)
-    return f"{sorted_rolls[0]}–{sorted_rolls[-1]}"
-
-
-def load_students(source) -> list[dict]:
+def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool = False) -> list:
     """
-    Load student enrolment data from CSV, JSON, or Excel (.xlsx/.xls).
-
-    Columns expected for CSV/JSON: name, reg_no, course_code, course_name, semester
-    Excel workbook expected sheets:
-      1. 'Arrear Details' (Columns: Sl. No., Branch, Sem, Code, Register Number)
-      2. 'Regular Courses' (Columns: Branch, Sem, Code)
-
-    Derives:
-      branch       — from reg_no or sheet
-      year         — from semester (sem 1-2 → yr 1, 3-4 → yr 2, etc.)
-      is_arrear    — enforced via 7228YY batch mapping (sem != regular_sem)
-      credits      — from column or default 3
+    Parses all worksheets in an Excel .xlsx file using pure python zipfile.
+    Returns list of dicts: [ {reg_no, roll_no, name, branch, course_code, semester, year, is_arrear}, ... ]
     """
-    if isinstance(source, str) and (source.endswith(".xlsx") or source.endswith(".xls")):
-        # 1. Try openpyxl (.xlsx / XML zip)
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(source, data_only=True)
-            enrolments = []
-            students_map = {}
+    records = []
+    try:
+        with zipfile.ZipFile(filepath, 'r') as z:
+            strings = []
+            if 'xl/sharedStrings.xml' in z.namelist():
+                tree = ET.fromstring(z.read('xl/sharedStrings.xml'))
+                for elem in tree.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}si'):
+                    t_texts = [t.text for t in elem.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t') if t.text]
+                    strings.append(''.join(t_texts))
 
-            ws_arr = wb["Arrear Details"] if "Arrear Details" in wb.sheetnames else wb.worksheets[0]
-            arr_rows = list(ws_arr.iter_rows(values_only=True))
+            wb = ET.fromstring(z.read('xl/workbook.xml'))
+            rels = ET.fromstring(z.read('xl/_rels/workbook.xml.rels'))
+            rel_dict = {r.attrib['Id']: r.attrib['Target'] for r in rels.findall('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship')}
+            sheets = wb.find('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets')
+            
+            for s in sheets:
+                sheet_name = s.attrib['name']
+                r_id = s.attrib['{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id']
+                target = rel_dict[r_id]
+                sheet_path = 'xl/' + target if not target.startswith('xl/') else target
+                sheet_tree = ET.fromstring(z.read(sheet_path))
+                rows = sheet_tree.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row')
+                
+                sheet_grid = {}
+                max_row = 0
+                for r in rows:
+                    r_idx = int(r.attrib['r'])
+                    max_row = max(max_row, r_idx)
+                    for c in r.findall('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c'):
+                        c_ref = c.attrib['r']
+                        t_type = c.attrib.get('t')
+                        v_elem = c.find('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v')
+                        val = v_elem.text if v_elem is not None else None
+                        if t_type == 's' and val is not None and int(val) < len(strings):
+                            val = strings[int(val)]
+                        sheet_grid[c_ref] = val
 
-            header_idx = None
-            for i, r in enumerate(arr_rows[:10]):
-                if not r:
-                    continue
-                row_strs = [str(x).strip().lower() for x in r if x is not None]
-                if any(k in row_strs for k in ["code", "course_code", "register number", "reg_no", "sem", "semester"]):
-                    header_idx = i
-                    break
+                sheet_dept = normalize_dept(sheet_name)
 
-            if header_idx is not None:
-                h_arr = [str(c).strip().lower() if c is not None else "" for c in arr_rows[header_idx]]
-                b_col = h_arr.index("branch") if "branch" in h_arr else (h_arr.index("dept") if "dept" in h_arr else 1)
-                s_col = h_arr.index("sem") if "sem" in h_arr else (h_arr.index("semester") if "semester" in h_arr else 2)
-                c_col = h_arr.index("code") if "code" in h_arr else (h_arr.index("course_code") if "course_code" in h_arr else 3)
-                r_col = h_arr.index("register number") if "register number" in h_arr else (h_arr.index("reg_no") if "reg_no" in h_arr else 4)
-
-                for row in arr_rows[header_idx + 1:]:
-                    if not row or all(v is None for v in row):
+                for r_idx in range(1, max_row + 1):
+                    raw = [sheet_grid.get(f'{chr(64+c)}{r_idx}', '') or '' for c in range(1, 10)]
+                    raw_clean = [str(v).strip() for v in raw if str(v).strip()]
+                    if not raw_clean:
                         continue
-                    branch = str(row[b_col]).strip() if len(row) > b_col and row[b_col] else "UNKNOWN"
-                    try:
-                        sem = int(row[s_col]) if len(row) > s_col and row[s_col] else 1
-                    except (ValueError, TypeError):
-                        sem = 1
-                    code = str(row[c_col]).strip() if len(row) > c_col and row[c_col] else ""
-                    raw_reg = str(row[r_col]).split(".")[0].strip() if len(row) > r_col and row[r_col] else ""
-                    if not raw_reg or not code:
+                    if any(x in ['S.No', 'Roll No', 'Register Number', 'Register No', 'Student Name', 'CourseCode', 'Dept'] for x in raw_clean):
                         continue
+                    if any('Sri Eshwar' in x or 'Coimbatore' in x for x in raw_clean):
+                        continue
+                    
+                    course_code = None
+                    reg_no = None
+                    roll_no = None
+                    dept = None
+                    name = None
+                    row_sem = default_sem
 
-                    reg_info = _parse_reg_no_info(raw_reg)
-                    batch = reg_info["batch"]
-                    if raw_reg not in students_map:
-                        students_map[raw_reg] = {"branch": branch, "batch": batch, "max_sem": sem}
-                    else:
-                        students_map[raw_reg]["max_sem"] = max(students_map[raw_reg]["max_sem"], sem)
-
-                    is_arr = (sem != reg_info["regular_sem"]) if reg_info["regular_sem"] is not None else True
-
-                    enrolments.append({
-                        "name": f"Student {raw_reg}",
-                        "reg_no": raw_reg,
-                        "branch": branch if branch != "UNKNOWN" else _parse_branch(raw_reg),
-                        "semester": sem,
-                        "year": sem_to_year(sem),
-                        "course_code": code,
-                        "course_name": code,
-                        "credits": 3,
-                        "is_arrear": is_arr,
-                    })
-
-                if "Regular Courses" in wb.sheetnames:
-                    ws_reg = wb["Regular Courses"]
-                    reg_rows = list(ws_reg.iter_rows(values_only=True))
-                    reg_h_idx = None
-                    for i, r in enumerate(reg_rows[:10]):
-                        if not r:
-                            continue
-                        r_strs = [str(x).strip().lower() for x in r if x is not None]
-                        if "branch" in r_strs and "code" in r_strs:
-                            reg_h_idx = i
+                    # 1. Reg No (12 digits)
+                    for item in raw_clean:
+                        if len(item) == 12 and item.isdigit():
+                            reg_no = item
                             break
 
-                    reg_courses = {}
-                    if reg_h_idx is not None:
-                        h_reg = [str(c).strip().lower() if c else "" for c in reg_rows[reg_h_idx]]
-                        rb_col = h_reg.index("branch") if "branch" in h_reg else 2
-                        rs_col = h_reg.index("sem") if "sem" in h_reg else 3
-                        rc_col = h_reg.index("code") if "code" in h_reg else 4
+                    # 2. Course Code (Strict course code check)
+                    for item in raw_clean:
+                        if is_valid_course_code(item):
+                            course_code = item.upper()
+                            break
 
-                        for row in reg_rows[reg_h_idx + 1:]:
-                            if not row or len(row) <= max(rb_col, rs_col, rc_col):
-                                continue
-                            b = str(row[rb_col]).strip() if row[rb_col] else ""
-                            try:
-                                s = int(row[rs_col]) if row[rs_col] else None
-                            except (ValueError, TypeError):
-                                s = None
-                            c = str(row[rc_col]).strip() if row[rc_col] else ""
-                            if b and s and c:
-                                reg_courses.setdefault((b, s), []).append(c)
+                    # 3. Dept (Exact token matching only)
+                    for item in raw_clean:
+                        norm = normalize_dept(item)
+                        if norm in KNOWN_DEPTS:
+                            dept = norm
+                            break
 
-                    for raw_reg, s_info in students_map.items():
-                        branch = s_info["branch"]
-                        reg_info = _parse_reg_no_info(raw_reg)
-                        reg_sem = reg_info["regular_sem"] if reg_info["regular_sem"] is not None else (s_info["max_sem"] + 1 if (s_info["max_sem"] % 2 == 0) else s_info["max_sem"] + 2)
+                    # 4. Roll No
+                    for item in raw_clean:
+                        if item != reg_no and item != course_code and item != dept:
+                            if ROLL_NO_PATTERN.match(item) or 'IC' in item or 'BTec' in item:
+                                roll_no = item
+                                break
 
-                        c_list = reg_courses.get((branch, reg_sem), [])
-                        for c_code in c_list:
-                            enrolments.append({
-                                "name": f"Student {raw_reg}",
-                                "reg_no": raw_reg,
-                                "branch": branch if branch != "UNKNOWN" else _parse_branch(raw_reg),
-                                "semester": reg_sem,
-                                "year": sem_to_year(reg_sem),
-                                "course_code": c_code,
-                                "course_name": c_code,
-                                "credits": 3,
-                                "is_arrear": False,
-                            })
+                    # Fallback Roll No if not matched
+                    if not roll_no:
+                        for item in raw_clean:
+                            if item not in [reg_no, course_code, dept] and not item.isdigit():
+                                if re.search(r'[A-Za-z]', item) and re.search(r'\d', item) and len(item) >= 4:
+                                    roll_no = item
+                                    break
 
-                if enrolments:
-                    return enrolments
-        except Exception:
-            pass
+                    # 5. Name is remaining string containing letters
+                    for item in raw_clean:
+                        if item not in [reg_no, roll_no, course_code, dept] and not item.isdigit():
+                            if re.search(r'[A-Za-z]', item):
+                                name = item
+                                break
 
-        # 2. Try xlrd for legacy binary .xls files
-        try:
-            import xlrd
-            wb = xlrd.open_workbook(source)
-            sheet = wb.sheet_by_index(0)
-            rows = [sheet.row_values(i) for i in range(sheet.nrows)]
-            if len(rows) >= 2:
-                header_idx = None
-                for i, r in enumerate(rows[:10]):
-                    r_strs = [str(x).strip().lower() for x in r if x is not None]
-                    if any(k in r_strs for k in ["code", "course_code", "register number", "reg_no", "sem"]):
-                        header_idx = i
-                        break
+                    # Resolve final department: RegNo 12-digit prefix > In-sheet dept > Sheet name
+                    final_dept = get_dept_from_reg_no(reg_no) or dept or sheet_dept
+                    if not final_dept or final_dept == "UNKNOWN":
+                        final_dept = "GENERAL"
 
-                if header_idx is not None:
-                    headers = [str(c).strip().lower().replace(" ", "_") if c is not None else "" for c in rows[header_idx]]
-                    enrolments = []
-                    col_map = {}
-                    for idx, h in enumerate(headers):
-                        if h in ("reg_no", "register_number", "register_no", "roll_no"):
-                            col_map["reg_no"] = idx
-                        elif h in ("course_code", "code", "subject_code"):
-                            col_map["course_code"] = idx
-                        elif h in ("semester", "sem"):
-                            col_map["semester"] = idx
-                        elif h in ("branch", "dept", "department"):
-                            col_map["branch"] = idx
+                    primary_id = reg_no if reg_no else roll_no
+                    if primary_id and course_code:
+                        records.append({
+                            "name": name or f"Student {primary_id}",
+                            "reg_no": primary_id,
+                            "roll_no": roll_no or primary_id,
+                            "branch": final_dept,
+                            "semester": row_sem,
+                            "year": sem_to_year(row_sem),
+                            "course_code": course_code,
+                            "course_name": course_code,
+                            "credits": 3,
+                            "is_arrear": is_arrear,
+                        })
+    except Exception as e:
+        print(f"Error parsing xlsx zipfile {filepath}: {e}")
+    return records
 
-                    if "reg_no" in col_map and "course_code" in col_map:
-                        for r in rows[header_idx + 1:]:
-                            if not r or all(v == "" or v is None for v in r):
-                                continue
-                            reg_no = str(r[col_map["reg_no"]]).split(".")[0].strip()
-                            course_code = str(r[col_map["course_code"]]).strip()
-                            if not reg_no or not course_code:
-                                continue
-                            sem = 1
-                            if "semester" in col_map and len(r) > col_map["semester"]:
-                                try:
-                                    sem = int(float(r[col_map["semester"]]))
-                                except (ValueError, TypeError):
-                                    sem = 1
-                            branch = str(r[col_map["branch"]]).strip() if "branch" in col_map and len(r) > col_map["branch"] else _parse_branch(reg_no)
 
-                            reg_info = _parse_reg_no_info(reg_no)
-                            is_arr = (sem != reg_info["regular_sem"]) if reg_info["regular_sem"] is not None else True
-
-                            enrolments.append({
-                                "name": f"Student {reg_no}",
-                                "reg_no": reg_no,
-                                "branch": branch if branch != "UNKNOWN" else _parse_branch(reg_no),
-                                "semester": sem,
-                                "year": sem_to_year(sem),
-                                "course_code": course_code,
-                                "course_name": course_code,
-                                "credits": 3,
-                                "is_arrear": is_arr,
-                            })
-                        if enrolments:
-                            return enrolments
-        except Exception:
-            pass
-
-        # 3. Fallback: CSV reader (for .xls files that are actually CSV text)
-        try:
-            with open(source, mode="r", encoding="utf-8-sig") as f:
+def load_students(source, file_type: str = "auto") -> list:
+    """Legacy single-source loader wrapper supporting xlsx, json, csv, or dict."""
+    if isinstance(source, str):
+        if source.endswith(".xlsx") or source.endswith(".xls"):
+            is_arr = True if file_type == "arrear" or "arrear" in source.lower() else False
+            return parse_xlsx_with_zipfile(source, default_sem=1, is_arrear=is_arr)
+        elif source.endswith(".json"):
+            with open(source, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for r in data:
+                    if "branch" not in r:
+                        r["branch"] = normalize_dept(r.get("dept") or r.get("department") or "GENERAL")
+                    if "semester" not in r:
+                        r["semester"] = 1
+                return data
+        elif source.endswith(".csv"):
+            records = []
+            with open(source, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                raw_records = list(reader)
-            if raw_records:
-                pass # fall through to general processing
-        except Exception:
-            pass
+                for row in reader:
+                    records.append({
+                        "name": row.get("name") or row.get("Student Name") or "Student",
+                        "reg_no": row.get("reg_no") or row.get("Register No") or row.get("roll_no"),
+                        "roll_no": row.get("roll_no") or row.get("Roll No"),
+                        "branch": normalize_dept(row.get("branch") or row.get("Dept")),
+                        "semester": int(row.get("semester") or 1),
+                        "year": sem_to_year(int(row.get("semester") or 1)),
+                        "course_code": row.get("course_code") or row.get("Course Code"),
+                        "course_name": row.get("course_name") or row.get("course_code"),
+                        "credits": int(row.get("credits") or 3),
+                        "is_arrear": row.get("is_arrear") == "true" or file_type == "arrear",
+                    })
+            return records
+    elif isinstance(source, dict):
+        return load_multi_year_dataset(source)
+    return []
 
-    if isinstance(source, list):
-        raw_records = source
-    elif isinstance(source, str) and source.endswith(".json"):
-        with open(source, encoding="utf-8") as f:
-            raw_records = json.load(f)
-    elif isinstance(source, str) and (source.endswith(".csv") or not source.endswith(".xlsx")):
-        with open(source, mode="r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            raw_records = list(reader)
-    elif pd is not None:
-        df = pd.read_csv(source)
-        raw_records = df.to_dict(orient="records")
-    else:
-        raw_records = []
 
-    column_alias = {
-        "register_number": "reg_no",
-        "register_no": "reg_no",
-        "reg_number": "reg_no",
-        "roll_no": "reg_no",
-        "code": "course_code",
-        "subject_code": "course_code",
-        "sem": "semester",
-        "dept": "branch",
-        "department": "branch",
+def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type: str = "odd") -> list:
+    """
+    Ingests files across active years (1-4) and optional arrear file.
+    Only harmonizes arrears belonging to active enrolled students and enforces LE rules.
+    """
+    sem_mapping = {
+        "odd":  {1: 1, 2: 3, 3: 5, 4: 7},
+        "even": {1: 2, 2: 4, 3: 6, 4: 8},
     }
-
-    student_max_sem = {}
-    for r in raw_records:
-        norm_r = {}
-        for k, v in r.items():
-            norm_k = str(k).strip().lower().replace(" ", "_")
-            norm_r[column_alias.get(norm_k, norm_k)] = v
-        reg = str(norm_r.get("reg_no", "")).strip()
-        try:
-            sem = int(norm_r.get("semester", 1))
-        except (ValueError, TypeError):
-            sem = 1
-        if reg:
-            student_max_sem[reg] = max(student_max_sem.get(reg, 1), sem)
-
-    enrolments = []
-    for r in raw_records:
-        norm_r = {}
-        for k, v in r.items():
-            norm_k = str(k).strip().lower().replace(" ", "_")
-            norm_r[column_alias.get(norm_k, norm_k)] = v
-
-        reg_no = str(norm_r.get("reg_no", "")).strip()
-        course_code = str(norm_r.get("course_code", "")).strip()
-        if not reg_no or not course_code:
+    active_sem_map = sem_mapping.get(sem_type.lower(), sem_mapping["odd"])
+    
+    all_enrolments = []
+    student_master_db = {}  # primary_id -> {name, branch, year, semester, roll_no}
+    
+    # 1. Ingest Regular Year Files
+    for y_str, fpath in year_files.items():
+        if not fpath:
             continue
+        y_num = int(y_str)
+        target_sem = active_sem_map.get(y_num, y_num * 2 - 1)
+        
+        parsed = parse_xlsx_with_zipfile(fpath, default_sem=target_sem, is_arrear=False)
+        for rec in parsed:
+            p_id = rec["reg_no"]
+            if p_id not in student_master_db and not rec["name"].startswith("Student "):
+                student_master_db[p_id] = {
+                    "name": rec["name"],
+                    "branch": rec["branch"],
+                    "year": rec["year"],
+                    "semester": rec["semester"],
+                    "roll_no": rec["roll_no"]
+                }
+            all_enrolments.append(rec)
+            
+    # 2. Ingest & Harmonize Arrear File if present
+    if arrear_file:
+        arrear_records = parse_xlsx_with_zipfile(arrear_file, default_sem=1, is_arrear=True)
+        seen_arrears = set()  # (reg_no, course_code) deduplication
+        
+        for arr in arrear_records:
+            p_id = arr["reg_no"]
+            c_code = arr["course_code"]
+            arr_sem = arr.get("semester", 1)
+            
+            # RULE 1: Only schedule arrears for active enrolled students in uploaded year files
+            if p_id not in student_master_db:
+                continue
 
-        try:
-            sem = int(norm_r.get("semester", 1))
-        except (ValueError, TypeError):
-            sem = 1
+            m_info = student_master_db[p_id]
+            r_no = m_info.get("roll_no", arr.get("roll_no"))
 
-        name = str(norm_r.get("name", f"Student {reg_no}"))
-        course_name = str(norm_r.get("course_name", course_code))
-        branch = str(norm_r.get("branch", "")).strip() or _parse_branch(reg_no)
+            # RULE 2: Lateral Entry students joined in Sem 3 -> MUST NOT receive Sem 1 or Sem 2 arrears
+            if is_lateral_entry_student(r_no, p_id) and arr_sem in [1, 2]:
+                continue
 
-        try:
-            credits_val = int(norm_r.get("credits", 3))
-        except (ValueError, TypeError):
-            credits_val = 3
-
-        if "is_arrear" in norm_r and norm_r["is_arrear"] is not None and str(norm_r["is_arrear"]).strip() != "":
-            val = str(norm_r["is_arrear"]).strip().lower()
-            is_arr = val in ("true", "1", "yes", "y", "t")
-        else:
-            info = _parse_reg_no_info(reg_no)
-            if info["regular_sem"] is not None:
-                is_arr = (sem != info["regular_sem"])
-            else:
-                is_arr = (sem < student_max_sem.get(reg_no, sem))
-
-        enrolments.append({
-            "name": name,
-            "reg_no": reg_no,
-            "branch": branch,
-            "semester": sem,
-            "year": sem_to_year(sem),
-            "course_code": course_code,
-            "course_name": course_name,
-            "credits": credits_val,
-            "is_arrear": is_arr,
-        })
-
-    return enrolments
+            if (p_id, c_code) in seen_arrears:
+                continue
+            seen_arrears.add((p_id, c_code))
+            
+            arr["name"] = m_info["name"]
+            arr["branch"] = m_info["branch"]
+            arr["current_year"] = m_info["year"]
+            arr["roll_no"] = r_no
+                
+            all_enrolments.append(arr)
+            
+    return all_enrolments
 
 
-def build_dept_roll_ranges(enrolments: list[dict]) -> dict[str, dict]:
-    """
-    Build dept-wise roll ranges per semester.
+def _roll_range(reg_nos: list) -> str:
+    if not reg_nos:
+        return ""
+    s = sorted(reg_nos)
+    return f"{s[0]}–{s[-1]}"
 
-    Returns:
-        {branch: {semester: "24CS001–24CS320"}}
-    """
-    from collections import defaultdict
-    dept_sem_rolls: dict[tuple, list] = defaultdict(list)
+
+def build_dept_roll_ranges(enrolments: list) -> dict:
+    """Build {branch: {semester: 'MIN–MAX'}} roll ranges."""
+    dept_sem_rolls = defaultdict(list)
     for row in enrolments:
-        dept_sem_rolls[(row["branch"], row["semester"])].append(row["reg_no"])
+        branch = row.get("branch") or "GENERAL"
+        sem = row.get("semester", 1)
+        reg = row.get("reg_no") or row.get("roll_no") or ""
+        if reg:
+            dept_sem_rolls[(branch, sem)].append(reg)
 
-    result: dict[str, dict] = defaultdict(dict)
+    result = defaultdict(dict)
     for (branch, sem), rolls in dept_sem_rolls.items():
         result[branch][sem] = _roll_range(rolls)
     return dict(result)
-

@@ -1,32 +1,28 @@
 """
 agent4_harmonizer.py — Agent 4: Regular Stream Harmonizer
-Rules: Rule 4 (same session per semester across branches), Rule 10 (year-wise session pattern),
-       Rule 11 (shared/common courses → same session, max accommodation), Rule 9 (credit priority).
+Rules: Rule 4 (session slot placement), Rule 11 (common exams → exact same session).
 
-Stats emitted:
-  assigned, unassigned, shared_assigned, slots_used
+Key responsibilities:
+- Place shared multi-branch courses in the EXACT same date+session for all branches.
+- Respect preferred session per year (Rule 4).
+- Ensure a branch never has two exams in the same session.
 """
-from config import DEFAULT_YEAR_SESSION_PATTERN
+from collections import defaultdict
+from config import DEFAULT_YEAR_SESSION_PATTERN, SESSION_TIMINGS, sem_to_year
 
 
 def assign_regular_slots(
-    open_slots: list[dict],
     clusters: list[dict],
-    year_session_pattern: dict[int, str] | None = None,
+    open_slots: list[dict],
+    year_session_pattern: dict | None = None,
     dept_roll_ranges: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """
-    Assign each course cluster to a unique (date, session) slot.
-
-    Priority order:
-      1. Shared (multi-branch) courses first — Rule 11
-      2. Higher credits first — Rule 9
-      3. Within a year, prefer the configured session — Rule 10
-      4. Strict one course per slot — Rule 4
+    Assign open date+session slots to regular course clusters.
 
     Args:
-        open_slots: from agent1, each has {date, session, time, preferred_years}
-        clusters: from agent3
+        clusters: output from agent3_matcher (or enriched with 'year')
+        open_slots: output from agent1_calendar
         year_session_pattern: {year: "FN"|"AN"}
         dept_roll_ranges: {branch: {semester: "24CS001–24CS320"}}
 
@@ -34,73 +30,77 @@ def assign_regular_slots(
         (draft, stats)
     """
     pattern = year_session_pattern or DEFAULT_YEAR_SESSION_PATTERN
-    used_branch_slots: set[tuple] = set()    # (sem, branch, date, session) taken
+    used_branch_session: set[tuple] = set()
     used_slots: set[tuple] = set()           # (date, session) used globally
-    year_date_used: dict[int, set] = {}      # year -> set of dates used
+    year_date_used: dict[int, set] = set()      # year -> set of dates used
+
+    # Ensure all clusters have year set from semesters
+    for c in clusters:
+        if "semesters" in c and c["semesters"]:
+            sem = min(c["semesters"])
+            c["semester"] = sem
+            c["year"] = sem_to_year(sem)
+        else:
+            c["semester"] = c.get("semester", 1)
+            c["year"] = sem_to_year(c["semester"])
+        if "is_shared" not in c:
+            c["is_shared"] = len(c.get("branches", [])) > 1
 
     # Sort: shared first, then credits desc, then year asc
     sorted_clusters = sorted(
         clusters,
-        key=lambda c: (not c["is_shared"], -c.get("credits", 3), c["year"], min(c["semesters"]))
+        key=lambda c: (not c.get("is_shared", False), -c.get("credits", 3), c.get("year", 2), min(c.get("semesters") or {1}))
     )
 
     draft: list[dict] = []
     unassigned: list[str] = []
 
     for cluster in sorted_clusters:
-        year = cluster["year"]
-        sems = cluster.get("semesters", [min(cluster.get("semesters", [1]))])
+        year = cluster.get("year", 2)
+        sems = cluster.get("semesters") or {cluster.get("semester", 1)}
+        sem = min(sems)
         preferred_session = pattern.get(year)
 
         assigned = False
         # Two-pass: preferred session first, then any free slot
         for prefer_only in (True, False):
             for slot in open_slots:
-                # Check branch-level conflict
-                clash = False
-                for sem in sems:
-                    for b in cluster["branches"]:
-                        if (sem, b, slot["date"], slot["session"]) in used_branch_slots:
-                            clash = True
-                            break
-                    if clash:
-                        break
-                if clash:
+                d = slot["date"]
+                sess = slot["session"]
+
+                if prefer_only and preferred_session and sess != preferred_session:
                     continue
 
-                if prefer_only and preferred_session and slot["session"] != preferred_session:
+                # Check if ANY branch in this cluster already has an exam at (branch, d, sess)
+                branch_clash = any(
+                    (b, d, sess) in used_branch_session
+                    for b in cluster.get("branches", [])
+                )
+                if branch_clash:
                     continue
 
-                # Mark branch slots as used
-                for sem in sems:
-                    for b in cluster["branches"]:
-                        used_branch_slots.add((sem, b, slot["date"], slot["session"]))
+                # Slot is free for all branches in this cluster — assign it
+                for b in cluster.get("branches", []):
+                    used_branch_session.add((b, d, sess))
+                used_slots.add((d, sess))
 
-                slot_key = (slot["date"], slot["session"])
-                used_slots.add(slot_key)
-                if year not in year_date_used:
-                    year_date_used[year] = set()
-                year_date_used[year].add(slot["date"])
-
-                # Build dept-wise roll ranges for this cluster
                 roll_ranges = {}
                 if dept_roll_ranges:
-                    sem = min(cluster["semesters"])
-                    for branch in cluster["branches"]:
-                        rr = dept_roll_ranges.get(branch, {}).get(sem, "")
+                    for b in cluster.get("branches", []):
+                        rr = dept_roll_ranges.get(b, {}).get(sem, "")
                         if rr:
-                            roll_ranges[branch] = rr
+                            roll_ranges[b] = rr
 
                 draft.append({
                     "course_code": cluster["course_code"],
                     "course_name": cluster["course_name"],
-                    "date": slot["date"],
-                    "session": slot["session"],
-                    "time": slot["time"],
-                    "semester": min(cluster["semesters"]),
+                    "date": d,
+                    "session": sess,
+                    "time": SESSION_TIMINGS[sess],
+                    "semester": sem,
                     "year": year,
-                    "branches": cluster["branches"],
-                    "is_shared": cluster["is_shared"],
+                    "branches": sorted(list(cluster.get("branches", []))),
+                    "is_shared": cluster.get("is_shared", False),
                     "is_arrear": False,
                     "credits": cluster.get("credits", 3),
                     "student_count": cluster.get("student_count", 0),
@@ -108,6 +108,7 @@ def assign_regular_slots(
                 })
                 assigned = True
                 break
+
             if assigned:
                 break
 
@@ -115,12 +116,11 @@ def assign_regular_slots(
             unassigned.append(cluster["course_code"])
 
     stats = {
-        "assigned": len(draft),
-        "unassigned": len(unassigned),
-        "unassigned_courses": unassigned,
-        "shared_assigned": len([e for e in draft if e["is_shared"]]),
-        "slots_used": len(used_slots),
+        "regular_courses_assigned": len(draft),
+        "unassigned_courses": len(unassigned),
+        "unassigned_list": unassigned,
+        "total_slots_used": len(used_slots),
         "function_type": "Slot Harmonizer",
-        "rules_applied": ["Rule 4 (same session per semester)", "Rule 9 (credit priority)", "Rule 10 (year-session pattern)", "Rule 11 (shared courses)"],
+        "rules_applied": ["Rule 4 (session slot placement)", "Rule 11 (common course exact session)"],
     }
     return draft, stats

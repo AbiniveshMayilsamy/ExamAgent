@@ -190,14 +190,14 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   const finalSchedule = [...spacedSchedule];
 
   // Map student -> set of slot keys ('YYYY-MM-DD_FN' / 'YYYY-MM-DD_AN') they already have
-  const studentSlotMap = {};
+  const studentArrearSlotMap = {};
   rows.forEach(r => {
     const reg = r.reg_no || r.roll_no || r.name;
     const courseCode = r.course_code || r.course;
     const scheduled = spacedSchedule.find(s => s.course_code === courseCode);
     if (scheduled && !r.is_arrear) {
-      if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
-      studentSlotMap[reg].add(`${scheduled.date}_${scheduled.session}`);
+      if (!studentArrearSlotMap[reg]) studentArrearSlotMap[reg] = new Set();
+      studentArrearSlotMap[reg].add(`${scheduled.date}_${scheduled.session}`);
     }
   });
 
@@ -221,7 +221,7 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
 
           let clash = false;
           for (const reg of enrolledStudents) {
-            if (studentSlotMap[reg] && studentSlotMap[reg].has(slotKey)) {
+            if (studentArrearSlotMap[reg] && studentArrearSlotMap[reg].has(slotKey)) {
               clash = true;
               break;
             }
@@ -235,8 +235,8 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
               is_arrear: true
             });
             enrolledStudents.forEach(reg => {
-              if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
-              studentSlotMap[reg].add(slotKey);
+              if (!studentArrearSlotMap[reg]) studentArrearSlotMap[reg] = new Set();
+              studentArrearSlotMap[reg].add(slotKey);
             });
             arrearCount++;
             onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${regDate} [${sess}]`);
@@ -254,7 +254,7 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
 
           let clash = false;
           for (const reg of enrolledStudents) {
-            if (studentSlotMap[reg] && studentSlotMap[reg].has(slotKey)) {
+            if (studentArrearSlotMap[reg] && studentArrearSlotMap[reg].has(slotKey)) {
               clash = true;
               break;
             }
@@ -268,8 +268,8 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
               is_arrear: true
             });
             enrolledStudents.forEach(reg => {
-              if (!studentSlotMap[reg]) studentSlotMap[reg] = new Set();
-              studentSlotMap[reg].add(slotKey);
+              if (!studentArrearSlotMap[reg]) studentArrearSlotMap[reg] = new Set();
+              studentArrearSlotMap[reg].add(slotKey);
             });
             arrearCount++;
             onAgentLog(6, `Placed arrear ${arrearItem.course_code} on ${slot.date} [${slot.session}]`);

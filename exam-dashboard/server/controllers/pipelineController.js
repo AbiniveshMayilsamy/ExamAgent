@@ -1,40 +1,26 @@
-const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const { getDbReady } = require('../dbState')
-const memoryStore = require('../models/memoryStore')
-const Run = require('../models/Run')
-const { emitToRun } = require('../socket/handlers')
+const { spawn } = require('child_process')
+const { getStore } = require('../models/runStore')
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
-
-const AGENT_NAMES = {
-  1: 'Calendar & Session Manager',
-  2: 'Student Conflict Checker',
-  3: 'Common Course Matcher',
-  4: 'Regular Stream Harmonizer',
-  5: 'Spacing & Difficulty Evaluator',
-  6: 'Arrear & Backlog Scheduler',
-}
-
-function initAgents() {
-  return AGENT_ORDER.map((id) => ({
-    agentId: id,
-    agentName: AGENT_NAMES[id],
-    status: 'idle',
-    logs: [],
-    summary: '',
-    llmExplanation: '',
-    stats: {},
-    output: null,
-  }))
-}
-
-// Map: runId -> python child process (for sending stdin signals)
+// In-memory process registry for human-intervention pauses
 const activeProcesses = new Map()
 
-function getStore() {
-  return getDbReady() ? Run : memoryStore
+function initAgents() {
+  return [
+    { id: 1, name: 'Calendar & Session Manager', functionType: 'Calendar Builder', status: 'pending', rules: 'Rules 1, 8 — max 2 sessions/day, leave days exclusion' },
+    { id: 3, name: 'Common Course Matcher', functionType: 'Course Cluster Builder', status: 'pending', rules: 'Rules 3, 5 — common course clustering & alignment' },
+    { id: 4, name: 'Regular Stream Harmonizer', functionType: 'Slot Harmonizer', status: 'pending', rules: 'Rule 4 — regular course slot assignment' },
+    { id: 5, name: 'Spacing & Difficulty Evaluator', functionType: 'Gap & Difficulty Enforcer', status: 'pending', rules: 'Rules 1, 6, 9 — min 1-day gap, hard course 2-day buffer post gap' },
+    { id: 6, name: 'Arrear & Backlog Scheduler', functionType: 'Arrear Packer', status: 'pending', rules: 'Rule 7 — opposite session arrear placement' },
+    { id: 7, name: 'Cumulative Conflict Resolver', functionType: 'Conflict Resolution Expert', status: 'pending', rules: 'Rule 2 — zero student clashes' },
+    { id: 2, name: 'Student Conflict Checker', functionType: 'Conflict Gatekeeper', status: 'pending', rules: 'Rule 2 — zero student clashes' },
+  ]
+}
+
+function emitToRun(io, runId, event, data) {
+  io.to(`run:${runId}`).emit(event, data)
+  io.emit(event, { ...data, runId })
 }
 
 async function triggerPipeline(req, res) {
@@ -91,16 +77,24 @@ async function triggerPipeline(req, res) {
   if (humanIntervention) pyArgs.push('--human-intervention')
 
   const py = spawn(
-    process.env.PYTHON_PATH || 'python',
+    process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3'),
     pyArgs,
     {
       env: { ...process.env, AGENTS_PATH: agentsPath,
              OLLAMA_URL: process.env.OLLAMA_URL, OLLAMA_MODEL: process.env.OLLAMA_MODEL },
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32'
     }
   )
 
   activeProcesses.set(run._id.toString(), py)
+
+  py.on('error', async (err) => {
+    console.error('[Python spawn error]', err)
+    activeProcesses.delete(run._id.toString())
+    await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
+    emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: `Failed to launch Python engine: ${err.message}` })
+  })
 
   let buffer = ''
   py.stdout.on('data', async (chunk) => {
@@ -119,7 +113,6 @@ async function triggerPipeline(req, res) {
 
   py.on('close', async (code) => {
     activeProcesses.delete(run._id.toString())
-    const store = getStore()
     if (code !== 0) {
       await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
       emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: `Python exited with code ${code}` })
@@ -140,63 +133,65 @@ async function resumeAgent(req, res) {
   res.json({ ok: true })
 }
 
-async function handleEvent(io, runId, evt, py) {
+async function handleEvent(io, runId, evt, pyProcess) {
   const store = getStore()
-  emitToRun(io, runId, evt.event, evt)
+  const run = await store.findById(runId)
+  if (!run) return
 
-  const agentId = evt.agentId
-  const idx = AGENT_ORDER.indexOf(agentId)
-
-  // Memory store update helpers
-  const updateField = async (path, value) => {
-    if (!getDbReady()) {
-      const run = store.runs.get(`mem_${runId}`)
-      if (!run) return
-      const parts = path.split('.')
-      let obj = run
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!obj[parts[i]]) obj[parts[i]] = {}
-        obj = obj[parts[i]]
-      }
-      obj[parts[parts.length - 1]] = value
-      return
+  switch (evt.event) {
+    case 'agent_start': {
+      const updatedAgents = run.agents.map(a =>
+        a.id === evt.agentId
+          ? { ...a, status: 'running', name: evt.agentName || a.name, functionType: evt.functionType || a.functionType, rules: evt.rules || a.rules }
+          : a
+      )
+      await store.findByIdAndUpdate(runId, { agents: updatedAgents })
+      emitToRun(io, runId, 'agent_start', { agentId: evt.agentId, agentName: evt.agentName, functionType: evt.functionType, rules: evt.rules })
+      break
     }
-    await Run.findByIdAndUpdate(runId, { $set: { [path]: value } })
-  }
 
-  if (evt.event === 'agent_start') {
-    await updateField(`agents.${idx}.status`, 'running')
-  } else if (evt.event === 'agent_log') {
-    if (!getDbReady()) {
-      const run = store.runs.get(`mem_${runId}`)
-      if (run && run.agents[idx]) run.agents[idx].logs.push(evt.message)
-    } else {
-      await Run.findByIdAndUpdate(runId, { $push: { [`agents.${idx}.logs`]: evt.message } })
+    case 'agent_log': {
+      emitToRun(io, runId, 'agent_log', { agentId: evt.agentId, message: evt.message })
+      break
     }
-  } else if (evt.event === 'agent_done') {
-    await updateField(`agents.${idx}.status`, 'done')
-    await updateField(`agents.${idx}.summary`, evt.summary)
-    await updateField(`agents.${idx}.llmExplanation`, evt.llmExplanation)
-    await updateField(`agents.${idx}.stats`, evt.stats)
-    await updateField(`agents.${idx}.output`, evt.output)
-  } else if (evt.event === 'agent_awaiting_review') {
-    await updateField(`agents.${idx}.status`, 'awaiting_review')
-    await updateField(`agents.${idx}.output`, evt.output)
-  } else if (evt.event === 'pipeline_done') {
-    await updateField('status', 'completed')
-    await updateField('schedule', evt.schedule)
-    await updateField('auditLog', evt.auditLog)
-    await updateField('conflicts', evt.conflicts)
-    await updateField('agentStats', evt.agentStats)
-    await updateField('deptRollRanges', evt.deptRollRanges)
-    await updateField('finishedAt', new Date())
-  } else if (evt.event === 'pipeline_fail') {
-    await updateField('status', 'failed')
-    await updateField('finishedAt', new Date())
+
+    case 'agent_done': {
+      const updatedAgents = run.agents.map(a =>
+        a.id === evt.agentId ? { ...a, status: 'done', summary: evt.summary, stats: evt.stats } : a
+      )
+      await store.findByIdAndUpdate(runId, { agents: updatedAgents })
+      emitToRun(io, runId, 'agent_done', { agentId: evt.agentId, summary: evt.summary, stats: evt.stats })
+      break
+    }
+
+    case 'agent_wait_human': {
+      const updatedAgents = run.agents.map(a =>
+        a.id === evt.agentId ? { ...a, status: 'waiting_human', prompt: evt.prompt, choices: evt.choices } : a
+      )
+      await store.findByIdAndUpdate(runId, { agents: updatedAgents, status: 'waiting_human' })
+      emitToRun(io, runId, 'agent_wait_human', { agentId: evt.agentId, prompt: evt.prompt, choices: evt.choices })
+      break
+    }
+
+    case 'pipeline_done': {
+      await store.findByIdAndUpdate(runId, {
+        status: evt.status === 'PASS' ? 'done' : 'failed',
+        finishedAt: new Date(),
+        schedule: evt.schedule,
+        conflicts: evt.conflicts,
+        auditLog: evt.auditLog,
+        aiSummary: evt.aiSummary,
+        deptRollRanges: evt.deptRollRanges,
+        totalExams: evt.totalExams,
+        totalArrears: evt.totalArrears,
+        students: evt.students,
+        startDate: evt.startDate,
+        endDate: evt.endDate,
+      })
+      emitToRun(io, runId, 'pipeline_done', evt)
+      break
+    }
   }
 }
 
-module.exports = {
-  triggerPipeline,
-  resumeAgent,
-}
+module.exports = { triggerPipeline, resumeAgent }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { runClientSidePipeline } from '../utils/clientSideSolver'
 import { parseExcelFileInBrowser } from '../utils/excelParser'
@@ -85,57 +85,11 @@ export function usePipeline(socket) {
   const [deptRollRanges, setDeptRollRanges] = useState({})
   const [students, setStudents] = useState([])
 
+  const currentFormDataRef = useRef(null)
+
   const updateAgent = useCallback((agentId, updates) => {
     setAgents(prev => prev.map(a => (a.id === agentId ? { ...a, ...updates } : a)))
   }, [])
-
-  useEffect(() => {
-    if (!socket || !runId) return
-
-    socket.emit('join_run', runId)
-
-    const logHandler = ({ agentId, message }) => {
-      if (message) {
-        setAuditLog(prev => [...prev, `[Agent ${agentId}] ${message}`])
-      }
-    }
-
-    const handlers = {
-      agent_start: ({ agentId, agentName, functionType, rules }) => {
-        updateAgent(agentId, {
-          status: 'running',
-          name: agentName || undefined,
-          functionType: functionType || undefined,
-          rules: rules || undefined,
-        })
-      },
-      agent_done: ({ agentId, summary, stats }) => {
-        updateAgent(agentId, { status: 'done', summary, stats })
-      },
-      pipeline_done: (data) => {
-        setPipelineStatus(data.status === 'PASS' ? 'done' : 'failed')
-        setSchedule(data.schedule || [])
-        setConflicts(data.conflicts || [])
-        setDeptRollRanges(data.deptRollRanges || {})
-        setStudents(data.students || [])
-        setStats({
-          totalExams: data.totalExams || 0,
-          totalArrears: data.totalArrears || 0,
-          conflictsFound: (data.conflicts || []).length,
-        })
-        if (data.aiSummary) setAiSuggestions(data.aiSummary)
-        setAuditLog(prev => [...prev, `Pipeline finished with status: ${data.status}`])
-      },
-    }
-
-    Object.entries(handlers).forEach(([evt, fn]) => socket.on(evt, fn))
-    socket.on('agent_log', logHandler)
-
-    return () => {
-      Object.entries(handlers).forEach(([evt, fn]) => socket.off(evt, fn))
-      socket.off('agent_log', logHandler)
-    }
-  }, [socket, runId, updateAgent])
 
   const runBrowserFallback = useCallback(async (formData) => {
     const semType = formData.get('semType') || 'odd'
@@ -207,7 +161,63 @@ export function usePipeline(socket) {
     )
   }, [updateAgent])
 
+  useEffect(() => {
+    if (!socket || !runId) return
+
+    socket.emit('join_run', runId)
+
+    const logHandler = ({ agentId, message }) => {
+      if (message) {
+        setAuditLog(prev => [...prev, `[Agent ${agentId}] ${message}`])
+      }
+    }
+
+    const handlers = {
+      agent_start: ({ agentId, agentName, functionType, rules }) => {
+        updateAgent(agentId, {
+          status: 'running',
+          name: agentName || undefined,
+          functionType: functionType || undefined,
+          rules: rules || undefined,
+        })
+      },
+      agent_done: ({ agentId, summary, stats }) => {
+        updateAgent(agentId, { status: 'done', summary, stats })
+      },
+      pipeline_done: (data) => {
+        setPipelineStatus(data.status === 'PASS' ? 'done' : 'failed')
+        setSchedule(data.schedule || [])
+        setConflicts(data.conflicts || [])
+        setDeptRollRanges(data.deptRollRanges || {})
+        setStudents(data.students || [])
+        setStats({
+          totalExams: data.totalExams || 0,
+          totalArrears: data.totalArrears || 0,
+          conflictsFound: (data.conflicts || []).length,
+        })
+        if (data.aiSummary) setAiSuggestions(data.aiSummary)
+        setAuditLog(prev => [...prev, `Pipeline finished with status: ${data.status}`])
+      },
+      pipeline_fail: async (data) => {
+        console.warn('Backend python failed:', data.error)
+        setAuditLog(prev => [...prev, `Backend process error: ${data.error}. Executing browser fallback engine...`])
+        if (currentFormDataRef.current) {
+          await runBrowserFallback(currentFormDataRef.current)
+        }
+      }
+    }
+
+    Object.entries(handlers).forEach(([evt, fn]) => socket.on(evt, fn))
+    socket.on('agent_log', logHandler)
+
+    return () => {
+      Object.entries(handlers).forEach(([evt, fn]) => socket.off(evt, fn))
+      socket.off('agent_log', logHandler)
+    }
+  }, [socket, runId, updateAgent, runBrowserFallback])
+
   const trigger = useCallback(async (formData) => {
+    currentFormDataRef.current = formData
     setAgents(initAgents())
     setPipelineStatus('running')
     setSchedule([])
@@ -217,7 +227,7 @@ export function usePipeline(socket) {
     setStats({ totalExams: 0, totalArrears: 0, conflictsFound: 0 })
     setDeptRollRanges({})
 
-    // If deployed on static GitHub Pages (or non-localhost static host), run browser solver directly
+    // Static GitHub Pages host check
     const isStaticHost = window.location.hostname.includes('github.io')
     if (isStaticHost) {
       setAuditLog(['Running in Browser Client-Side Mode for static deployment...'])
@@ -230,18 +240,10 @@ export function usePipeline(socket) {
       setRunId(data.runId)
       return data.runId
     } catch (err) {
-      const is405 = err.response?.status === 405 || err.message?.includes('405')
-      if (is405) {
-        console.warn('Backend returned 405 on static host. Switching to in-browser client pipeline execution...')
-        setAuditLog(['Static hosting detected (HTTP 405). Switching to browser solver...'])
-        await runBrowserFallback(formData)
-        return 'static_browser_run'
-      }
-      const errMsg = err.response?.data?.error || err.message || 'Failed to connect to backend server.'
-      console.error('Pipeline Trigger Error:', errMsg)
-      setPipelineStatus('failed')
-      setAuditLog([`Trigger Error: ${errMsg}`])
-      throw err
+      console.warn('Backend trigger error. Switching to browser fallback engine...', err)
+      setAuditLog(['Backend unavailable or returned error. Switching to browser solver...'])
+      await runBrowserFallback(formData)
+      return 'static_browser_run'
     }
   }, [updateAgent, runBrowserFallback])
 

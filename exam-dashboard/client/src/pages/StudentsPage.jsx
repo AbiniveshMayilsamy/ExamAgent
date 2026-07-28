@@ -33,23 +33,31 @@ function generateMockStudents() {
   let globalId = 1
 
   ALL_BRANCHES.forEach(dept => {
-    const prefix = deptsCodes[dept] || 'CS'
-    for (let i = 1; i <= 15; i++) {
-      const fn = sampleFirstNames[(i + globalId) % sampleFirstNames.length]
-      const ln = sampleLastNames[(i * 3 + globalId) % sampleLastNames.length]
-      const reg_no = `24${prefix}${String(i).padStart(3, '0')}`
-      const name = `${fn} ${ln}`
+    const deptCode = deptsCodes[dept] || '104'
+    const batches = [
+      { year: '26', sem: 1 },
+      { year: '25', sem: 3 },
+      { year: '24', sem: 5 },
+      { year: '23', sem: 7 },
+    ]
+    batches.forEach(b => {
+      for (let i = 1; i <= 4; i++) {
+        const fn = sampleFirstNames[(i + globalId) % sampleFirstNames.length]
+        const ln = sampleLastNames[(i * 3 + globalId) % sampleLastNames.length]
+        const reg_no = `7228${b.year}${deptCode}${String(i).padStart(3, '0')}`
+        const name = `${fn} ${ln}`
 
-      list.push({
-        id: globalId++,
-        reg_no,
-        name,
-        branch: dept,
-        semester: (i % 4) * 2 + 1, // Sem 1, 3, 5, 7
-        section: i % 2 === 0 ? 'B' : 'A',
-        year: Math.ceil(((i % 4) * 2 + 1) / 2)
-      })
-    }
+        list.push({
+          id: globalId++,
+          reg_no,
+          name,
+          branch: dept,
+          semester: b.sem,
+          section: i % 2 === 0 ? 'B' : 'A',
+          year: Math.ceil(b.sem / 2)
+        })
+      }
+    })
   })
 
   return list

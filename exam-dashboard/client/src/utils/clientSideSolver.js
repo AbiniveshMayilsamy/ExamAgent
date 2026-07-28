@@ -330,12 +330,37 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   });
 }
 
-function parseCSV(text) {
-  if (!text) return null;
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return null;
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+function parseRegNoInfo(regNo) {
+  const clean = String(regNo || '').trim();
+  let batch = '25';
+  if (clean.startsWith('7228') && clean.length >= 6) {
+    batch = clean.substring(4, 6);
+  } else if (clean.startsWith('202') && clean.length >= 6) {
+    batch = clean.substring(2, 4);
+  } else if (clean.length >= 2 && /^\d{2}/.test(clean)) {
+    batch = clean.substring(0, 2);
+  }
+
+  const batchMap = {
+    '26': 1,
+    '25': 3,
+    '24': 5,
+    '23': 7
+  };
+  return {
+    batch,
+    regularSem: batchMap[batch] || null
+  };
+}
+
+function parseCSV(csvText) {
+  if (!csvText || typeof csvText !== 'string') return [];
+  const lines = csvText.trim().split('\n');
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
   const results = [];
+
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
     if (values.length === headers.length) {
@@ -343,6 +368,16 @@ function parseCSV(text) {
       headers.forEach((h, idx) => {
         obj[h] = values[idx];
       });
+
+      // Parse reg_no batch for is_arrear
+      const reg = obj.reg_no || obj.register_number || obj.roll_no;
+      if (reg && obj.semester) {
+        const info = parseRegNoInfo(reg);
+        if (info.regularSem !== null && obj.is_arrear === undefined) {
+          obj.is_arrear = parseInt(obj.semester, 10) !== info.regularSem;
+        }
+      }
+
       results.push(obj);
     }
   }
@@ -351,23 +386,31 @@ function parseCSV(text) {
 
 function generateDefaultMockData() {
   const depts = ['CSE', 'AIML', 'CCE', 'CYSE', 'MECH', 'ECE', 'VLSI', 'EEE', 'AIDS', 'CSBS', 'IT', 'S&H'];
-  const deptsCodes = { CSE: 'CS', AIML: 'AM', CCE: 'CC', CYSE: 'CY', MECH: 'ME', ECE: 'EC', VLSI: 'VL', EEE: 'EE', AIDS: 'AD', CSBS: 'CB', IT: 'IT', 'S&H': 'SH' };
+  const deptsCodes = { CSE: '104', AIML: '102', CCE: '103', CYSE: '105', MECH: '114', ECE: '106', VLSI: '107', EEE: '108', AIDS: '109', CSBS: '110', IT: '111', 'S&H': '101' };
+  const batches = [
+    { year: '26', sem: 1 },
+    { year: '25', sem: 3 },
+    { year: '24', sem: 5 },
+    { year: '23', sem: 7 },
+  ];
 
   const records = [];
   depts.forEach(dept => {
-    const prefix = deptsCodes[dept];
-    for (let i = 1; i <= 20; i++) {
-      const reg_no = `24${prefix}${String(i).padStart(3, '0')}`;
-      const name = `Student ${prefix}-${i}`;
+    const deptCode = deptsCodes[dept] || '104';
+    batches.forEach(b => {
+      for (let i = 1; i <= 5; i++) {
+        const reg_no = `7228${b.year}${deptCode}${String(i).padStart(3, '0')}`;
+        const name = `Student ${dept}-${b.year}-${i}`;
 
-      records.push({ reg_no, name, branch: dept, semester: 1, course_code: 'MA101', course_name: 'Engineering Mathematics I', is_arrear: false });
-      records.push({ reg_no, name, branch: dept, semester: 1, course_code: 'PH101', course_name: 'Engineering Physics', is_arrear: false });
-      records.push({ reg_no, name, branch: dept, semester: 3, course_code: `${prefix}301`, course_name: `${dept} Core Subject I`, is_arrear: false });
+        records.push({ reg_no, name, branch: dept, semester: b.sem, course_code: `${dept}${b.sem}01`, course_name: `${dept} Core Sem ${b.sem}`, is_arrear: false });
+        records.push({ reg_no, name, branch: dept, semester: b.sem, course_code: `MA${b.sem}01`, course_name: `Mathematics Sem ${b.sem}`, is_arrear: false });
 
-      if (i % 5 === 0) {
-        records.push({ reg_no, name, branch: dept, semester: 1, course_code: 'GE101', course_name: 'Engineering Graphics (Arrear)', is_arrear: true });
+        if (b.sem > 1 && i % 2 === 0) {
+          const arrearSem = b.sem - 2;
+          records.push({ reg_no, name, branch: dept, semester: arrearSem, course_code: `MA${arrearSem}01`, course_name: `Maths Sem ${arrearSem} (Arrear)`, is_arrear: true });
+        }
       }
-    }
+    });
   });
 
   return records;

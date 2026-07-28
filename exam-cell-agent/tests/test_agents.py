@@ -140,3 +140,26 @@ def test_full_pipeline_no_conflicts():
     )
     assert result["status"] == "PASS", f"Conflicts found: {result.get('conflicts', [])}"
     assert len(result["schedule"]) > 0
+
+
+# ── 7228 Reg No Batch Rule Test ──────────────────────────────────────────────
+
+def test_parse_reg_no_7228_rules():
+    from data_loader import _parse_reg_no_info
+    
+    info_26 = _parse_reg_no_info("722826104001")
+    assert info_26["batch"] == "26"
+    assert info_26["regular_sem"] == 1
+
+    info_25 = _parse_reg_no_info("722825104015")
+    assert info_25["batch"] == "25"
+    assert info_25["regular_sem"] == 3
+
+    info_24 = _parse_reg_no_info("722824106020")
+    assert info_24["batch"] == "24"
+    assert info_24["regular_sem"] == 5
+
+    info_23 = _parse_reg_no_info("722823114005")
+    assert info_23["batch"] == "23"
+    assert info_23["regular_sem"] == 7
+

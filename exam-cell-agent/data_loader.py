@@ -2,16 +2,61 @@
 data_loader.py — Loads student/course enrolment data.
 Derives: branch, is_arrear, year, credits, roll_range per dept.
 """
+import csv
 import json
 import re
-import pandas as pd
 from config import sem_to_year
+
+try:
+    import pandas as pd
+except Exception:
+    pd = None
 
 
 def _parse_branch(reg_no: str) -> str:
-    """Extract branch code from reg_no, e.g. '24CS001' -> 'CS'."""
+    """Extract branch code from reg_no, e.g. '722824104001' -> '104' or 'CS'."""
     match = re.search(r"[A-Z]{2,6}", reg_no)
-    return match.group(0) if match else "UNKNOWN"
+    if match:
+        return match.group(0)
+    # Check 12-digit format e.g., 722823104001 (branch code digits 6..9)
+    clean = str(reg_no).strip()
+    if clean.startswith("7228") and len(clean) >= 9:
+        return clean[6:9]
+    return "UNKNOWN"
+
+
+def _parse_reg_no_info(reg_no: str) -> dict:
+    """
+    Extract college code and batch year from reg_no.
+    Standard reg_no format: '7228YY...' (e.g. 722823104001)
+      - College code: '7228'
+      - Batch code: '23', '24', '25', '26'
+    Maps batch to regular semester:
+      '26' -> Sem 1 (1st Year)
+      '25' -> Sem 3 (2nd Year)
+      '24' -> Sem 5 (3rd Year)
+      '23' -> Sem 7 (4th Year)
+    """
+    clean = str(reg_no).strip()
+    batch = "25"
+    if clean.startswith("7228") and len(clean) >= 6:
+        batch = clean[4:6]
+    elif clean.startswith("202") and len(clean) >= 6:
+        batch = clean[2:4]
+    elif len(clean) >= 2 and clean[:2].isdigit():
+        batch = clean[:2]
+
+    batch_map = {
+        "26": 1,
+        "25": 3,
+        "24": 5,
+        "23": 7,
+    }
+    regular_sem = batch_map.get(batch, None)
+    return {
+        "batch": batch,
+        "regular_sem": regular_sem,
+    }
 
 
 def _roll_range(reg_nos: list[str]) -> str:
@@ -34,7 +79,7 @@ def load_students(source) -> list[dict]:
     Derives:
       branch       — from reg_no or sheet
       year         — from semester (sem 1-2 → yr 1, 3-4 → yr 2, etc.)
-      is_arrear    — explicit per sheet or semester < current_semester
+      is_arrear    — enforced via 7228YY batch mapping (sem != regular_sem)
       credits      — from column or default 3
     """
     if isinstance(source, str) and (source.endswith(".xlsx") or source.endswith(".xls")):
@@ -153,12 +198,20 @@ def load_students(source) -> list[dict]:
 
         return enrolments
 
-    if isinstance(source, str) and source.endswith(".json"):
-        with open(source) as f:
-            records = json.load(f)
-        df = pd.DataFrame(records)
-    else:
+    if isinstance(source, list):
+        raw_records = source
+    elif isinstance(source, str) and source.endswith(".json"):
+        with open(source, encoding="utf-8") as f:
+            raw_records = json.load(f)
+    elif isinstance(source, str) and (source.endswith(".csv") or not source.endswith(".xlsx")):
+        with open(source, mode="r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            raw_records = list(reader)
+    elif pd is not None:
         df = pd.read_csv(source)
+        raw_records = df.to_dict(orient="records")
+    else:
+        raw_records = []
 
     column_alias = {
         "register_number": "reg_no",
@@ -171,44 +224,70 @@ def load_students(source) -> list[dict]:
         "dept": "branch",
         "department": "branch",
     }
-    renamed = {}
-    for col in df.columns:
-        norm = str(col).strip().lower().replace(" ", "_")
-        renamed[col] = column_alias.get(norm, norm)
-    df = df.rename(columns=renamed)
 
-    if "reg_no" not in df.columns or "course_code" not in df.columns:
-        raise ValueError("Input data must contain register number and course code columns.")
+    student_max_sem = {}
+    for r in raw_records:
+        norm_r = {}
+        for k, v in r.items():
+            norm_k = str(k).strip().lower().replace(" ", "_")
+            norm_r[column_alias.get(norm_k, norm_k)] = v
+        reg = str(norm_r.get("reg_no", "")).strip()
+        try:
+            sem = int(norm_r.get("semester", 1))
+        except (ValueError, TypeError):
+            sem = 1
+        if reg:
+            student_max_sem[reg] = max(student_max_sem.get(reg, 1), sem)
 
-    if "semester" not in df.columns:
-        df["semester"] = 1
-    else:
-        df["semester"] = pd.to_numeric(df["semester"], errors="coerce").fillna(1).astype(int)
+    enrolments = []
+    for r in raw_records:
+        norm_r = {}
+        for k, v in r.items():
+            norm_k = str(k).strip().lower().replace(" ", "_")
+            norm_r[column_alias.get(norm_k, norm_k)] = v
 
-    if "name" not in df.columns:
-        df["name"] = df["reg_no"].apply(lambda r: f"Student {r}")
+        reg_no = str(norm_r.get("reg_no", "")).strip()
+        course_code = str(norm_r.get("course_code", "")).strip()
+        if not reg_no or not course_code:
+            continue
 
-    if "course_name" not in df.columns:
-        df["course_name"] = df["course_code"]
+        try:
+            sem = int(norm_r.get("semester", 1))
+        except (ValueError, TypeError):
+            sem = 1
 
-    if "branch" not in df.columns:
-        df["branch"] = df["reg_no"].apply(_parse_branch)
+        name = str(norm_r.get("name", f"Student {reg_no}"))
+        course_name = str(norm_r.get("course_name", course_code))
+        branch = str(norm_r.get("branch", "")).strip() or _parse_branch(reg_no)
 
-    df["year"] = df["semester"].apply(sem_to_year)
+        try:
+            credits_val = int(norm_r.get("credits", 3))
+        except (ValueError, TypeError):
+            credits_val = 3
 
-    if "credits" not in df.columns:
-        df["credits"] = 3
-    else:
-        df["credits"] = pd.to_numeric(df["credits"], errors="coerce").fillna(3).astype(int)
+        if "is_arrear" in norm_r and norm_r["is_arrear"] is not None and str(norm_r["is_arrear"]).strip() != "":
+            val = str(norm_r["is_arrear"]).strip().lower()
+            is_arr = val in ("true", "1", "yes", "y", "t")
+        else:
+            info = _parse_reg_no_info(reg_no)
+            if info["regular_sem"] is not None:
+                is_arr = (sem != info["regular_sem"])
+            else:
+                is_arr = (sem < student_max_sem.get(reg_no, sem))
 
-    if "is_arrear" not in df.columns:
-        current_sem = df.groupby("reg_no")["semester"].max().rename("current_semester")
-        df = df.join(current_sem, on="reg_no")
-        df["is_arrear"] = df["semester"] < df["current_semester"]
-    else:
-        df["is_arrear"] = df["is_arrear"].astype(bool)
+        enrolments.append({
+            "name": name,
+            "reg_no": reg_no,
+            "branch": branch,
+            "semester": sem,
+            "year": sem_to_year(sem),
+            "course_code": course_code,
+            "course_name": course_name,
+            "credits": credits_val,
+            "is_arrear": is_arr,
+        })
 
-    return df.to_dict(orient="records")
+    return enrolments
 
 
 def build_dept_roll_ranges(enrolments: list[dict]) -> dict[str, dict]:

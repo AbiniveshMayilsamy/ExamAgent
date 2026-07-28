@@ -211,7 +211,7 @@ export default function SchedulePage() {
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => { e.preventDefault(); setCsvFile(e.dataTransfer.files[0]) }}
                 >
-                  <input id="csv-upload" type="file" accept=".csv,.json" style={{ display: 'none' }}
+                  <input id="csv-upload" type="file" accept=".xlsx,.xls,.csv,.json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" style={{ display: 'none' }}
                     onChange={e => setCsvFile(e.target.files[0])} />
                   {csvFile ? (
                     <div>
@@ -225,7 +225,7 @@ export default function SchedulePage() {
                     <div>
                       <div style={{ fontSize: 28, marginBottom: 6, color: '#94a3b8' }}>↑</div>
                       <div style={{ fontWeight: 600, color: '#334155' }}>Click to upload or drag & drop</div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>CSV or JSON · Student enrolment data</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Excel (.xlsx, .xls), CSV, or JSON · Student enrolment data</div>
                     </div>
                   )}
                 </div>

@@ -5,10 +5,10 @@
  */
 
 export async function runClientSidePipeline(params, onAgentStart, onAgentLog, onAgentDone, onPipelineDone) {
-  const { csvText, startDate, endDate, leaveDays = [], difficultyMap = {} } = params;
+  const { csvText, enrolments, startDate, endDate, leaveDays = [], difficultyMap = {} } = params;
 
-  // Step 0: Parse CSV or generate mock data if empty
-  let rows = parseCSV(csvText);
+  // Step 0: Use enrolments array, parse CSV, or generate mock data if empty
+  let rows = enrolments && enrolments.length > 0 ? enrolments : parseCSV(csvText);
   if (!rows || rows.length === 0) {
     rows = generateDefaultMockData();
   }

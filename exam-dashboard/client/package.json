@@ -10,7 +10,8 @@
     "react-router-dom": "^6.30.4",
     "react-scripts": "5.0.1",
     "recharts": "^2.12.7",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "gh-pages": "^6.1.1"

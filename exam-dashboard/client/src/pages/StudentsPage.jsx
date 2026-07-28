@@ -41,18 +41,20 @@ export default function StudentsPage() {
   const [bulkBranchTitle, setBulkBranchTitle] = useState('')
   const [isBulkPrintOpen, setIsBulkPrintOpen] = useState(false)
 
-  // Use real students from pipeline if available, else empty
+  // Use real students from pipeline if available, sorted numerically by Register Number
   const allStudents = useMemo(() => {
     if (pipelineStudents && pipelineStudents.length > 0) {
-      return pipelineStudents.map((s, i) => ({
-        id: i + 1,
-        reg_no: s.reg_no,
-        name: s.name,
-        branch: s.branch,
-        semester: s.semester,
-        section: 'A',
-        year: Math.ceil(s.semester / 2),
-      }))
+      return pipelineStudents
+        .map((s, i) => ({
+          id: i + 1,
+          reg_no: s.reg_no,
+          name: s.name,
+          branch: s.branch,
+          semester: s.semester,
+          section: 'A',
+          year: Math.ceil(s.semester / 2),
+        }))
+        .sort((a, b) => a.reg_no.localeCompare(b.reg_no, undefined, { numeric: true }))
     }
     return []
   }, [pipelineStudents])
@@ -87,7 +89,7 @@ export default function StudentsPage() {
     return filtered.sort((a, b) => (a.date > b.date ? 1 : -1))
   }
 
-  // Filter students based on search controls
+  // Filter students based on search controls (always preserved in numeric Register Number order)
   const filteredStudents = useMemo(() => {
     return allStudents.filter(s => {
       const query = search.trim().toLowerCase()
@@ -103,13 +105,27 @@ export default function StudentsPage() {
     })
   }, [allStudents, search, selectedBranch, selectedSem])
 
-  // Bulk Print Handler for Selected Branch
-  const handleBulkPrintBranch = (branchCode) => {
-    const targetBranch = branchCode === 'ALL' ? (selectedBranch === 'ALL' ? 'CSE' : selectedBranch) : branchCode
-    const branchStudents = allStudents.filter(s => s.branch === targetBranch)
-    const title = `${targetBranch} - ${BRANCH_TITLES[targetBranch] || targetBranch}`
+  // Dedicated Bulk Download for CSE Hall Tickets sorted by Register Number
+  const handleBulkDownloadCSE = () => {
+    const cseStudents = allStudents
+      .filter(s => s.branch === 'CSE')
+      .sort((a, b) => a.reg_no.localeCompare(b.reg_no, undefined, { numeric: true }))
 
-    setBulkPrintStudents(branchStudents)
+    setBulkPrintStudents(cseStudents)
+    setBulkBranchTitle('Computer Science & Engineering (CSE) - Bulk Download (Sorted by Reg No)')
+    setIsBulkPrintOpen(true)
+  }
+
+  // Bulk Download for Currently Filtered / Selected Branch
+  const handleBulkDownloadFiltered = () => {
+    const sortedFiltered = [...filteredStudents].sort((a, b) =>
+      a.reg_no.localeCompare(b.reg_no, undefined, { numeric: true })
+    )
+    const title = selectedBranch === 'ALL'
+      ? `All Registered Departments (${sortedFiltered.length} Students) - Sorted by Reg No`
+      : `${selectedBranch} - ${BRANCH_TITLES[selectedBranch] || selectedBranch} (${sortedFiltered.length} Students)`
+
+    setBulkPrintStudents(sortedFiltered)
     setBulkBranchTitle(title)
     setIsBulkPrintOpen(true)
   }
@@ -124,7 +140,7 @@ export default function StudentsPage() {
     setIsDetailDrawerOpen(true)
   }
 
-  // REQUIREMENT 1: If timetable is not generated yet, show empty state blocking access
+  // If timetable is not generated yet, show empty state blocking access
   if (schedule.length === 0) {
     return (
       <div>
@@ -159,22 +175,46 @@ export default function StudentsPage() {
     )
   }
 
+  const cseCount = allStudents.filter(s => s.branch === 'CSE').length
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h1>Student Directory & Official Hall Tickets</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>
-            Manage student registrations, preview individual hall tickets, or export entire branch PDFs.
+            Manage student registrations, preview individual hall tickets, or bulk export CSE / branch PDFs in sorted order.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {/* Specific CSE Bulk Download Button */}
+          <button
+            className="btn"
+            onClick={handleBulkDownloadCSE}
+            style={{
+              background: '#047857',
+              color: '#ffffff',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontWeight: 700,
+              padding: '10px 18px',
+              borderRadius: 6,
+              boxShadow: '0 2px 8px rgba(4, 120, 87, 0.35)',
+              cursor: 'pointer'
+            }}
+          >
+            <span>📥</span> Bulk Download CSE Hall Tickets ({cseCount})
+          </button>
+
+          {/* Bulk Download Current Filtered View */}
           <button
             className="btn btn-primary"
-            onClick={() => handleBulkPrintBranch(selectedBranch)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+            onClick={handleBulkDownloadFiltered}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, padding: '10px 18px' }}
           >
-            <span>🖨️</span> Export Branch Hall Tickets ({selectedBranch === 'ALL' ? 'CSE' : selectedBranch})
+            <span>🖨️</span> Bulk Download ({filteredStudents.length} Sorted)
           </button>
         </div>
       </div>
@@ -240,11 +280,29 @@ export default function StudentsPage() {
         {/* Student Table */}
         <div className="card">
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15 }}>
-              Registered Students ({filteredStudents.length})
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>Registered Students ({filteredStudents.length})</span>
+              <button
+                onClick={handleBulkDownloadCSE}
+                style={{
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: 4,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                <span>📥</span> Bulk Download CSE ({cseCount})
+              </button>
             </div>
             <div style={{ fontSize: 12, color: '#64748b' }}>
-              Showing {filteredStudents.length} of {allStudents.length} total students
+              Sorted numerically by Register Number
             </div>
           </div>
 
@@ -302,7 +360,7 @@ export default function StudentsPage() {
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <button
-                            className="btn btn-secondary btn-sm"
+                            className="btn btn-outline btn-sm"
                             onClick={() => handleOpenDetails(s)}
                           >
                             View Details
@@ -310,9 +368,9 @@ export default function StudentsPage() {
                           <button
                             className="btn btn-primary btn-sm"
                             onClick={() => handleOpenHallTicket(s)}
-                            style={{ fontWeight: 700 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                           >
-                            🎟️ Hall Ticket
+                            <span>🎟️</span> Hall Ticket
                           </button>
                         </div>
                       </td>
@@ -326,79 +384,93 @@ export default function StudentsPage() {
       </div>
 
       {/* Single Hall Ticket Modal */}
-      {isHallTicketOpen && activeStudent && (
-        <HallTicketModal
-          student={activeStudent}
-          getStudentExams={getStudentExams}
-          isOpen={isHallTicketOpen}
-          onClose={() => setIsHallTicketOpen(false)}
-        />
-      )}
+      <HallTicketModal
+        student={activeStudent}
+        getStudentExams={getStudentExams}
+        isOpen={isHallTicketOpen}
+        onClose={() => setIsHallTicketOpen(false)}
+      />
 
-      {/* Bulk Hall Tickets Modal */}
-      {isBulkPrintOpen && bulkPrintStudents.length > 0 && (
-        <HallTicketModal
-          students={bulkPrintStudents}
-          getStudentExams={getStudentExams}
-          branchTitle={bulkBranchTitle}
-          isOpen={isBulkPrintOpen}
-          onClose={() => setIsBulkPrintOpen(false)}
-        />
-      )}
+      {/* Bulk Branch Hall Ticket Export Modal */}
+      <HallTicketModal
+        students={bulkPrintStudents}
+        branchTitle={bulkBranchTitle}
+        getStudentExams={getStudentExams}
+        isOpen={isBulkPrintOpen}
+        onClose={() => setIsBulkPrintOpen(false)}
+      />
 
-      {/* Student Details Drawer */}
+      {/* Student Detail Drawer */}
       {isDetailDrawerOpen && activeStudent && (
         <div style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
-          background: '#ffffff', boxShadow: '-5px 0 25px rgba(0,0,0,0.15)',
-          zIndex: 900, padding: 24, display: 'flex', flexDirection: 'column'
+          position: 'fixed', top: 0, right: 0, bottom: 0, width: 480,
+          background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+          zIndex: 900, padding: 24, overflowY: 'auto'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, color: '#0f172a' }}>Student Enrolment Details</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Profile & Examinations</h3>
             <button
               onClick={() => setIsDetailDrawerOpen(false)}
-              style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#64748b' }}
+              style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
             >
               ✕
             </button>
           </div>
 
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 8, marginBottom: 20, border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{activeStudent.name}</div>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Reg No: {activeStudent.reg_no}</div>
-            <div style={{ fontSize: 13, color: '#64748b' }}>Branch: {activeStudent.branch} (Sem {activeStudent.semester})</div>
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>{activeStudent.name}</div>
+            <div style={{ fontSize: 13, fontFamily: 'monospace', color: '#2563eb', fontWeight: 700, marginTop: 4 }}>
+              Reg No: {activeStudent.reg_no}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+              <span className="badge badge-blue">{activeStudent.branch}</span>
+              <span className="badge badge-gray">Semester {activeStudent.semester}</span>
+              <span className="badge badge-gray">Year {activeStudent.year}</span>
+            </div>
           </div>
 
-          <h4 style={{ margin: '0 0 12px 0', color: '#0f172a', fontSize: 14 }}>Scheduled Exams ({getStudentExams(activeStudent).length})</h4>
+          <h4 style={{ fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
+            Registered Examinations ({getStudentExams(activeStudent).length})
+          </h4>
 
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {getStudentExams(activeStudent).map((ex, i) => (
-              <div key={i} style={{
-                padding: 12, borderRadius: 8, border: '1px solid #e2e8f0',
-                background: ex.is_arrear ? '#fef2f2' : '#ffffff',
-                borderColor: ex.is_arrear ? '#fecaca' : '#e2e8f0'
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {getStudentExams(activeStudent).map((e, idx) => (
+              <div key={idx} style={{
+                padding: '10px 14px',
+                border: '1px solid #e2e8f0',
+                borderRadius: 6,
+                background: e.is_arrear ? '#fffbe6' : '#fff',
+                borderColor: e.is_arrear ? '#ffe58f' : '#e2e8f0',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{ex.course_code}</span>
-                  <span className={`badge ${ex.is_arrear ? 'badge-red' : 'badge-blue'}`}>
-                    {ex.is_arrear ? 'ARREAR' : 'REGULAR'}
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
+                    {e.course_code}
+                  </span>
+                  <span className={`badge ${e.is_arrear ? 'badge-yellow' : 'badge-blue'}`} style={{ fontSize: 10 }}>
+                    {e.is_arrear ? 'ARREAR' : 'REGULAR'}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{ex.course_name}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', marginTop: 6 }}>
-                  📅 {ex.date} &nbsp;·&nbsp; {ex.session} ({ex.time})
+                <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{e.course_name}</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, display: 'flex', gap: 12 }}>
+                  <span>📅 {e.date}</span>
+                  <span>⏰ {e.session} ({e.time})</span>
                 </div>
               </div>
             ))}
           </div>
 
-          <button
-            className="btn btn-primary"
-            onClick={() => { setIsDetailDrawerOpen(false); handleOpenHallTicket(activeStudent) }}
-            style={{ marginTop: 16, width: '100%', padding: 12, fontWeight: 700 }}
-          >
-            🎟️ View Full Hall Ticket
-          </button>
+          <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
+            <button
+              className="btn btn-primary"
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              onClick={() => {
+                setIsDetailDrawerOpen(false)
+                handleOpenHallTicket(activeStudent)
+              }}
+            >
+              <span>🎟️</span> Generate Hall Ticket
+            </button>
+          </div>
         </div>
       )}
     </div>

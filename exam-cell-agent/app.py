@@ -46,9 +46,9 @@ with col_input:
     st.subheader("📥 Input")
 
     uploaded_file = st.file_uploader(
-        "Upload student data (CSV or JSON)",
-        type=["csv", "json"],
-        help="Required columns: name, reg_no, course_code, course_name, semester",
+        "Upload student data (Excel, CSV, or JSON)",
+        type=["csv", "xlsx", "xls", "json"],
+        help="Supports Excel workbooks (.xlsx, .xls), CSV, or JSON files",
     )
 
     today = date.today()

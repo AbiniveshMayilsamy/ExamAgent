@@ -89,22 +89,22 @@ def load_students(source) -> list[dict]:
         enrolments = []
         students_map = {}
 
-        # 1. Load Arrear Details
+        # 1. Load Arrear Details or Main Sheet
         ws_arr = wb["Arrear Details"] if "Arrear Details" in wb.sheetnames else wb.worksheets[0]
         arr_rows = list(ws_arr.iter_rows(values_only=True))
 
         header_idx = 0
         for i, r in enumerate(arr_rows[:5]):
             row_strs = [str(x).strip().lower() for x in r if x is not None]
-            if "code" in row_strs or "register number" in row_strs or "sem" in row_strs:
+            if "code" in row_strs or "register number" in row_strs or "sem" in row_strs or "course_code" in row_strs or "reg_no" in row_strs:
                 header_idx = i
                 break
 
-        h_arr = [str(c).strip().lower() for c in arr_rows[header_idx]]
-        b_col = h_arr.index("branch") if "branch" in h_arr else 1
-        s_col = h_arr.index("sem") if "sem" in h_arr else 2
-        c_col = h_arr.index("code") if "code" in h_arr else 3
-        r_col = h_arr.index("register number") if "register number" in h_arr else 4
+        h_arr = [str(c).strip().lower() if c is not None else "" for c in arr_rows[header_idx]]
+        b_col = h_arr.index("branch") if "branch" in h_arr else (h_arr.index("dept") if "dept" in h_arr else 1)
+        s_col = h_arr.index("sem") if "sem" in h_arr else (h_arr.index("semester") if "semester" in h_arr else 2)
+        c_col = h_arr.index("code") if "code" in h_arr else (h_arr.index("course_code") if "course_code" in h_arr else 3)
+        r_col = h_arr.index("register number") if "register number" in h_arr else (h_arr.index("reg_no") if "reg_no" in h_arr else 4)
 
         for row in arr_rows[header_idx + 1:]:
             if not row or all(v is None for v in row):
@@ -119,11 +119,18 @@ def load_students(source) -> list[dict]:
             if not raw_reg or not code:
                 continue
 
-            batch = raw_reg[4:6] if len(raw_reg) >= 6 else "25"
+            reg_info = _parse_reg_no_info(raw_reg)
+            batch = reg_info["batch"]
             if raw_reg not in students_map:
                 students_map[raw_reg] = {"branch": branch, "batch": batch, "max_sem": sem}
             else:
                 students_map[raw_reg]["max_sem"] = max(students_map[raw_reg]["max_sem"], sem)
+
+            # Determine arrear via 7228 batch rule if batch maps to a regular sem
+            if reg_info["regular_sem"] is not None:
+                is_arr = (sem != reg_info["regular_sem"])
+            else:
+                is_arr = True
 
             enrolments.append({
                 "name": f"Student {raw_reg}",
@@ -134,7 +141,7 @@ def load_students(source) -> list[dict]:
                 "course_code": code,
                 "course_name": code,
                 "credits": 3,
-                "is_arrear": True,
+                "is_arrear": is_arr,
             })
 
         # 2. Load Regular Courses (if available)
@@ -172,13 +179,9 @@ def load_students(source) -> list[dict]:
             # Expand regular enrolments for each student
             for raw_reg, s_info in students_map.items():
                 branch = s_info["branch"]
-                batch = s_info["batch"]
-                if batch == "25":
-                    reg_sem = 3
-                elif batch == "24":
-                    reg_sem = 5
-                elif batch == "23":
-                    reg_sem = 7
+                reg_info = _parse_reg_no_info(raw_reg)
+                if reg_info["regular_sem"] is not None:
+                    reg_sem = reg_info["regular_sem"]
                 else:
                     reg_sem = s_info["max_sem"] + 1 if (s_info["max_sem"] % 2 == 0) else s_info["max_sem"] + 2
 

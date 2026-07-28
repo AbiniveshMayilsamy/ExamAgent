@@ -1,6 +1,6 @@
 # Exam Cell AI Timetable Generator
 
-A 6-agent system that generates collision-free exam timetables from student enrolment data, enforcing all 9 exam cell rules deterministically.
+A 6-agent system that generates collision-free exam timetables from student enrolment data, enforcing all exam cell rules deterministically.
 
 ## Setup
 
@@ -9,28 +9,20 @@ cd exam-cell-agent
 pip install -r requirements.txt
 ```
 
-## Run the dashboard
-
-```bash
-streamlit run app.py
-```
-
-Open http://localhost:8501 in your browser.
-
 ## Input format
 
-Upload a CSV or JSON file with these columns:
+Upload an Excel (.xlsx, .xls), CSV, or JSON file with these columns:
 
 | Column | Example |
 |---|---|
 | name | Alex Smith |
-| reg_no | 2026CSE001 |
+| reg_no | 722825104001 |
 | course_code | CS301 |
 | course_name | Data Structures |
 | semester | 3 |
 
-Branch is auto-derived from `reg_no` (e.g. `2026CSE001` → `CSE`).  
-Arrear flag is auto-derived: `True` if the row's semester < the student's max semester.
+College code (`7228`) and batch year (`23`, `24`, `25`, `26`) are auto-parsed from `reg_no`.  
+Arrear flag is auto-derived based on whether the course semester matches the student batch's assigned regular semester.
 
 ## Run tests
 
@@ -49,14 +41,13 @@ python -m pytest tests/ -v
 | 5 — Spacing & Difficulty Evaluator | `agent5_spacing.py` | 6, 9 |
 | 6 — Arrear & Backlog Scheduler | `agent6_arrear.py` | 7 |
 
-The Central Hub (`hub.py`) runs them in order: 1 → 3 → 4 → 5 → 6 → 2, with an automatic retry loop (up to 15 attempts) if Agent 2 finds a conflict.
+The Central Hub (`hub.py`) runs them in order: 1 → 3 → 4 → 5 → 6 → 2, with an automatic retry loop if Agent 2 finds a conflict.
 
 ## Project structure
 
 ```
 exam-cell-agent/
-├── app.py                  # Streamlit dashboard
-├── data_loader.py          # CSV/JSON parsing + derived fields
+├── data_loader.py          # Excel/CSV/JSON parsing + derived fields
 ├── agent1_calendar.py      # Agent 1
 ├── agent2_conflict.py      # Agent 2
 ├── agent3_matcher.py       # Agent 3

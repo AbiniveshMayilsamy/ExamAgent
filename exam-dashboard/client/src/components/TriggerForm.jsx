@@ -65,7 +65,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         <label style={lbl}>Student Data / Arrear File (Excel .xlsx, .csv, .json)</label>
-        <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={e => setFile(e.target.files[0])}
+        <input type="file" accept=".xlsx,.xls,.csv,.json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" onChange={e => setFile(e.target.files[0])}
           style={{ ...inp, padding: '6px' }} />
       </div>
 

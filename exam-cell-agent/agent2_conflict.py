@@ -10,59 +10,72 @@ from collections import defaultdict
 
 def check_conflicts(complete_schedule: list[dict], enrolments: list[dict]) -> dict:
     """
-    Final gatekeeper — never skip.
+    Final gatekeeper — accurately checks each student's regular and arrear exam slots.
 
-    1. Build course_code -> (date, session): regular slots take priority over arrear
-    2. For each student, collect all their exams and deduplicate same course_code
-    3. Flag any two DIFFERENT courses landing on the same (date, session)
+    1. Map regular course codes -> (date, session)
+    2. Map student reg_no -> list of (course_code, date, session)
+    3. Arrear courses map directly via student_reg_nos on scheduled item
+    4. Flag any student who has >1 exam in the same (date, session) slot
 
     Returns:
         {status, conflicts, stats}
     """
-    course_slot: dict[str, tuple] = {}
+    # 1. Map regular course codes to their scheduled slots
+    regular_course_slots = {}
     for entry in complete_schedule:
         if not entry.get("is_arrear", False):
-            course_slot[entry["course_code"]] = (entry["date"], entry["session"])
-    for entry in complete_schedule:
-        if entry.get("is_arrear", False) and entry["course_code"] not in course_slot:
-            course_slot[entry["course_code"]] = (entry["date"], entry["session"])
+            regular_course_slots[entry["course_code"]] = (entry["date"], entry["session"])
 
-    # Build student -> all enrolled courses map from enrolments
-    student_courses: dict[str, set] = defaultdict(set)
+    # 2. Map each student to their assigned exam slots
+    student_scheduled_slots = defaultdict(list)
+
+    # Add regular enrolments
     for row in enrolments:
-        student_courses[row["reg_no"]].add(row["course_code"])
+        if not row.get("is_arrear", False):
+            reg_no = row.get("reg_no")
+            c_code = row.get("course_code")
+            if reg_no and c_code and c_code in regular_course_slots:
+                student_scheduled_slots[reg_no].append((c_code, regular_course_slots[c_code]))
 
-    # Check each student for conflicts
+    # Add arrear enrolments (strictly using student_reg_nos attached to scheduled item)
+    for entry in complete_schedule:
+        if entry.get("is_arrear", False):
+            stus = entry.get("student_reg_nos", [])
+            c_code = entry.get("course_code")
+            slot = (entry["date"], entry["session"])
+            for r_no in stus:
+                student_scheduled_slots[r_no].append((c_code, slot))
+
+    # 3. Detect clashes per student
     conflicts = []
-    for reg_no, course_set in student_courses.items():
-        if not course_set:
-            continue
+    for reg_no, exam_list in student_scheduled_slots.items():
+        slot_map = defaultdict(list)
+        for c_code, slot in exam_list:
+            slot_map[slot].append(c_code)
             
-        # Get slots for all courses this student is taking
-        student_slots: dict[tuple, list] = defaultdict(list)
-        for code in course_set:
-            if code in course_slot:
-                d, s = course_slot[code]
-                student_slots[(d, s)].append(code)
-        
-        # Find conflicts: any slot with >1 course
-        for (d, s), codes in student_slots.items():
-            if len(codes) > 1:
-                for i in range(len(codes)):
-                    for j in range(i + 1, len(codes)):
+        for (d, s), codes in slot_map.items():
+            # Deduplicate same course code if listed multiple times
+            unique_codes = list(dict.fromkeys(codes))
+            if len(unique_codes) > 1:
+                for i in range(len(unique_codes)):
+                    for j in range(i + 1, len(unique_codes)):
                         conflicts.append({
                             "reg_no": reg_no,
-                            "course_a": codes[i],
-                            "course_b": codes[j],
+                            "course_a": unique_codes[i],
+                            "course_b": unique_codes[j],
+                            "course1": unique_codes[i],
+                            "course2": unique_codes[j],
                             "date": d,
                             "session": s,
                         })
 
-    total_students = len(student_courses)
+    total_students = len(student_scheduled_slots)
+    conflicting_students = len({c["reg_no"] for c in conflicts})
+
     stats = {
         "students_checked": total_students,
         "conflicts_found": len(conflicts),
-        "clean_students": total_students - len({c["reg_no"] for c in conflicts}),
+        "clean_students": total_students - conflicting_students,
         "function_type": "Conflict Gatekeeper",
         "rules_applied": ["Rule 2 (1 exam per student per session)"],
     }

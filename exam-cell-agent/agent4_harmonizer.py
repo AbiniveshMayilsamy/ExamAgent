@@ -29,10 +29,15 @@ def assign_regular_slots(
     Returns:
         (draft, stats)
     """
+    # Parameter order safeguard (swap if clusters and open_slots were passed in reverse)
+    if clusters and isinstance(clusters, list) and len(clusters) > 0:
+        if "date" in clusters[0] and "session" in clusters[0] and "course_code" not in clusters[0]:
+            clusters, open_slots = open_slots, clusters
+
     pattern = year_session_pattern or DEFAULT_YEAR_SESSION_PATTERN
     used_branch_session: set[tuple] = set()
     used_slots: set[tuple] = set()           # (date, session) used globally
-    year_date_used: dict[int, set] = set()      # year -> set of dates used
+    year_date_used: dict[int, set] = defaultdict(set)      # year -> set of dates used
 
     # Ensure all clusters have year set from semesters
     for c in clusters:
@@ -96,7 +101,7 @@ def assign_regular_slots(
                     "course_name": cluster["course_name"],
                     "date": d,
                     "session": sess,
-                    "time": SESSION_TIMINGS[sess],
+                    "time": SESSION_TIMINGS.get(sess, "9:30 AM – 12:30 PM"),
                     "semester": sem,
                     "year": year,
                     "branches": sorted(list(cluster.get("branches", []))),
@@ -116,6 +121,7 @@ def assign_regular_slots(
             unassigned.append(cluster["course_code"])
 
     stats = {
+        "assigned": len(draft),
         "regular_courses_assigned": len(draft),
         "unassigned_courses": len(unassigned),
         "unassigned_list": unassigned,

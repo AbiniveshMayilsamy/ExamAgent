@@ -7,7 +7,7 @@ Features:
 - Dynamic sheet department inferencing (e.g. 'III CYS' sheet missing Dept column).
 - Authoritative 12-digit Register Number department mapping (REG_DEPT_MAP).
 - Lateral Entry (LE) rule enforcement (LE students joined in Sem 3, Sem 1/2 arrears discarded).
-- Course Code Semester Inferencing (e.g., U23EC384 -> Sem 3, U23CS494 -> Sem 4).
+- Course Code Semester Inferencing (e.g., U23EC384 -> Sem 3, U23CS494 -> Sem 4, U23MA209 -> Sem 4, U23OME06 -> Sem 4).
 - Active scheduled year filtering (only process arrears for loaded active years).
 - Department normalization ('AI&DS' -> 'AIDS').
 - Student Master Database building (RegNo / RollNo indexing).
@@ -109,23 +109,41 @@ def is_lateral_entry_student(roll_no: str, reg_no: str) -> bool:
 
 def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int:
     """
-    Extract exact semester from course code (e.g. U23EC384 -> Sem 3, U23CS494 -> Sem 4, U23MA209 -> Sem 2).
-    In Regulations 2023, the 3-digit course number starts with the semester digit.
+    Extract exact semester from course code for Sri Eshwar / Anna University Regulations 2023.
+    - U23MA209, U23MA210, U23MA282 -> Sem 4 (Mathematics IV)
+    - Open Electives (U23O... e.g. U23OME06, U23OAD81) -> Sem 4
+    - U23...3xx (U23EC384, U23CS383) -> Sem 3
+    - U23...4xx (U23CS405, U23CS494, U23AD491) -> Sem 4
+    - U23...5xx (U23CS591, U23CB593) -> Sem 5
+    - U23MA201..206, U23PH201, U23CY281 -> Sem 1 or 2
     """
     if not course_code:
         return fallback_sem
     code = str(course_code).upper().strip()
-    match = re.search(r'[A-Z]+(\d{3})', code)
+    
+    # 1. Specific Known Course Overrides
+    if code in ["U23MA209", "U23MA210", "U23MA282"]:
+        return 4
+    if code.startswith("U23O") or code.startswith("19O") or code.startswith("20O"):
+        return 4  # Open Electives offered in 4th Sem
+        
+    # 2. Match 3-digit subject number after dept code
+    match = re.search(r'[A-Z]{2,4}(\d{3})', code)
     if match:
         digit3 = match.group(1)
         sem_digit = int(digit3[0])
         if 1 <= sem_digit <= 8:
+            if code.startswith("U23MA20") and sem_digit == 2:
+                return 2
             return sem_digit
+
+    # 3. Fallback pattern match
     match2 = re.search(r'^[U\d]{0,3}[A-Z]{2,4}(\d)', code)
     if match2:
         sem_digit = int(match2.group(1))
         if 1 <= sem_digit <= 8:
             return sem_digit
+
     return fallback_sem
 
 

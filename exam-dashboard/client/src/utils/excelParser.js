@@ -64,12 +64,20 @@ export function isLateralEntryStudent(rollNo, regNo) {
 export function extractSemFromCourseCode(courseCode, fallbackSem = 1) {
   if (!courseCode) return fallbackSem
   const code = String(courseCode).toUpperCase().trim()
-  const match = code.match(/[A-Z]+(\d{3})/)
+
+  if (['U23MA209', 'U23MA210', 'U23MA282'].includes(code)) return 4
+  if (code.startsWith('U23O') || code.startsWith('19O') || code.startsWith('20O')) return 4
+
+  const match = code.match(/[A-Z]{2,4}(\d{3})/)
   if (match) {
     const digit3 = match[1]
     const semDigit = parseInt(digit3[0], 10)
-    if (semDigit >= 1 && semDigit <= 8) return semDigit
+    if (semDigit >= 1 && semDigit <= 8) {
+      if (code.startsWith('U23MA20') && semDigit === 2) return 2
+      return semDigit
+    }
   }
+
   const match2 = code.match(/^[U\d]{0,3}[A-Z]{2,4}(\d)/)
   if (match2) {
     const semDigit = parseInt(match2[1], 10)

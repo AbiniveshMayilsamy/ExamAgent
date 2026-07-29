@@ -61,6 +61,23 @@ export function isLateralEntryStudent(rollNo, regNo) {
   return false
 }
 
+export function extractSemFromCourseCode(courseCode, fallbackSem = 1) {
+  if (!courseCode) return fallbackSem
+  const code = String(courseCode).toUpperCase().trim()
+  const match = code.match(/[A-Z]+(\d{3})/)
+  if (match) {
+    const digit3 = match[1]
+    const semDigit = parseInt(digit3[0], 10)
+    if (semDigit >= 1 && semDigit <= 8) return semDigit
+  }
+  const match2 = code.match(/^[U\d]{0,3}[A-Z]{2,4}(\d)/)
+  if (match2) {
+    const semDigit = parseInt(match2[1], 10)
+    if (semDigit >= 1 && semDigit <= 8) return semDigit
+  }
+  return fallbackSem
+}
+
 export async function parseExcelFileInBrowser(file, defaultSem = 1, isArrear = false) {
   const records = []
   try {
@@ -148,13 +165,14 @@ export async function parseExcelFileInBrowser(file, defaultSem = 1, isArrear = f
         const primaryId = regNo || rollNo
 
         if (primaryId && courseCode) {
+          const actualSem = isArrear ? extractSemFromCourseCode(courseCode, rowSem) : rowSem
           records.push({
             name: name || `Student ${primaryId}`,
             reg_no: primaryId,
             roll_no: rollNo || primaryId,
             branch: finalDept,
-            semester: rowSem,
-            year: Math.ceil(rowSem / 2),
+            semester: actualSem,
+            year: Math.ceil(actualSem / 2),
             course_code: courseCode,
             course_name: courseCode,
             credits: 3,

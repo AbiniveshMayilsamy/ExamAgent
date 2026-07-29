@@ -7,6 +7,7 @@ Features:
 - Dynamic sheet department inferencing (e.g. 'III CYS' sheet missing Dept column).
 - Authoritative 12-digit Register Number department mapping (REG_DEPT_MAP).
 - Lateral Entry (LE) rule enforcement (LE students joined in Sem 3, Sem 1/2 arrears discarded).
+- Course Code Semester Inferencing (e.g., U23EC384 -> Sem 3, U23CS494 -> Sem 4).
 - Active scheduled year filtering (only process arrears for loaded active years).
 - Department normalization ('AI&DS' -> 'AIDS').
 - Student Master Database building (RegNo / RollNo indexing).
@@ -104,6 +105,28 @@ def is_lateral_entry_student(roll_no: str, reg_no: str) -> bool:
     if len(p_str) == 12 and p_str.isdigit() and p_str[9] == '3':
         return True
     return False
+
+
+def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int:
+    """
+    Extract exact semester from course code (e.g. U23EC384 -> Sem 3, U23CS494 -> Sem 4, U23MA209 -> Sem 2).
+    In Regulations 2023, the 3-digit course number starts with the semester digit.
+    """
+    if not course_code:
+        return fallback_sem
+    code = str(course_code).upper().strip()
+    match = re.search(r'[A-Z]+(\d{3})', code)
+    if match:
+        digit3 = match.group(1)
+        sem_digit = int(digit3[0])
+        if 1 <= sem_digit <= 8:
+            return sem_digit
+    match2 = re.search(r'^[U\d]{0,3}[A-Z]{2,4}(\d)', code)
+    if match2:
+        sem_digit = int(match2.group(1))
+        if 1 <= sem_digit <= 8:
+            return sem_digit
+    return fallback_sem
 
 
 def _parse_reg_no_info(reg_no: str) -> dict:
@@ -231,13 +254,14 @@ def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool
 
                     primary_id = reg_no if reg_no else roll_no
                     if primary_id and course_code:
+                        actual_sem = extract_sem_from_course_code(course_code, row_sem) if is_arrear else row_sem
                         records.append({
                             "name": name or f"Student {primary_id}",
                             "reg_no": primary_id,
                             "roll_no": roll_no or primary_id,
                             "branch": final_dept,
-                            "semester": row_sem,
-                            "year": sem_to_year(row_sem),
+                            "semester": actual_sem,
+                            "year": sem_to_year(actual_sem),
                             "course_code": course_code,
                             "course_name": course_code,
                             "credits": 3,

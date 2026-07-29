@@ -3,13 +3,12 @@ agent6_arrear.py — Agent 6: Arrear & Backlog Scheduler
 Rules:
   Rule 2  — 1 student max 1 exam per session (zero clashes)
   Rule 7  — Regular exams in Morning (FN), Arrear exams in Evening (AN)
-  Rule 1  — Max 2 sessions per day (FN + AN), so max 2 arrear exams on any day
-  Rapid Packing — Pack excess arrear exams into earliest available Evening slots to conclude exams as soon as possible
+  Rule 1  — Max 2 sessions per day (FN + AN)
+  Common Arrears  — Scheduled in opposite sessions during regular exam window
+  Uncommon Arrears — Scheduled AFTER the bunch of regular exams finishes (d > max_reg_date)
 """
 from collections import defaultdict
 from config import DEFAULT_YEAR_SESSION_PATTERN, sem_to_year, SESSION_TIMINGS
-
-OPPOSITE = {"FN": "AN", "AN": "FN"}
 
 
 def schedule_arrears(
@@ -21,8 +20,8 @@ def schedule_arrears(
 ) -> tuple[list[dict], dict]:
     """
     Schedule arrear exams without any student clash.
-    Pass 1: Opposite session on regular exam days (Regular Morning + Arrear Evening same day).
-    Pass 2: Pack excess arrear exams into earliest available dates to conclude exams as soon as possible.
+    - Common Arrear Exams (shared across multiple branches or large enrolment) write in opposite sessions during regular exam days.
+    - Uncommon Arrear Exams (single-branch / small enrolment) write AFTER the main bunch of regular exams finishes.
     """
     pattern = year_session_pattern or DEFAULT_YEAR_SESSION_PATTERN
     schedule = [dict(e) for e in spaced_schedule]
@@ -50,6 +49,7 @@ def schedule_arrears(
     sorted_arrears = sorted(arrear_courses.items(), key=lambda x: -len(x[1]))
 
     regular_dates = sorted({e["date"] for e in schedule if not e.get("is_arrear", False)})
+    max_reg_date = regular_dates[-1] if regular_dates else "2026-11-18"
     open_dates = sorted({s["date"] for s in open_slots})
 
     assigned_count = 0
@@ -62,33 +62,37 @@ def schedule_arrears(
         reg_nos = [s["reg_no"] for s in students]
         branches = sorted({s["branch"] for s in students})
 
+        is_common = len(branches) > 1 or len(students) >= 5
         assigned = False
 
-        # Pass 1: prefer Evening (AN) session on regular exam days (Regular Morning FN + Arrear Evening AN)
-        for reg_date in regular_dates:
-            reg_sessions_today = {
-                e["session"] for e in schedule
-                if not e.get("is_arrear", False) and e["date"] == reg_date
-            }
-
-            target_sessions = ["AN", "FN"] if "FN" in reg_sessions_today else ["FN", "AN"]
-            for sess in target_sessions:
-                slot_key = (reg_date, sess)
-                if not _has_clash(reg_nos, slot_key, student_slots):
-                    _place_arrear(
-                        schedule, used_slots, student_slots, days_used,
-                        course_code, course_name, reg_date, sess, sem, branches, reg_nos
-                    )
-                    assigned = True
-                    assigned_count += 1
+        # 1. Common Arrear Exams: schedule in opposite session on regular exam days
+        if is_common:
+            for reg_date in regular_dates:
+                reg_sessions_today = {
+                    e["session"] for e in schedule
+                    if not e.get("is_arrear", False) and e["date"] == reg_date
+                }
+                target_sessions = ["AN", "FN"] if "FN" in reg_sessions_today else ["FN", "AN"]
+                for sess in target_sessions:
+                    slot_key = (reg_date, sess)
+                    if not _has_clash(reg_nos, slot_key, student_slots):
+                        _place_arrear(
+                            schedule, used_slots, student_slots, days_used,
+                            course_code, course_name, reg_date, sess, sem, branches, reg_nos
+                        )
+                        assigned = True
+                        assigned_count += 1
+                        break
+                if assigned:
                     break
 
-            if assigned:
-                break
-
-        # Pass 2: pack excess arrear exams into earliest available dates (Evening AN first)
+        # 2. Uncommon Arrear Exams (or unassigned arrears): schedule AFTER the bunch of regular exams (d > max_reg_date)
         if not assigned:
-            for d in open_dates:
+            post_reg_dates = [d for d in open_dates if d > max_reg_date]
+            other_dates = [d for d in open_dates if d <= max_reg_date]
+            ordered_dates = post_reg_dates + other_dates
+
+            for d in ordered_dates:
                 for sess in ("AN", "FN"):
                     slot_key = (d, sess)
                     if not _has_clash(reg_nos, slot_key, student_slots):
@@ -108,7 +112,7 @@ def schedule_arrears(
         "arrear_students": len({s["reg_no"] for students in arrear_courses.values() for s in students}),
         "days_used": len(days_used),
         "function_type": "Arrear Packer",
-        "rules_applied": ["Rule 1 (max 2 sessions/day)", "Rule 2 (0 clashes)", "Rule 7 (Regular Morning + Arrear Evening)", "Rapid Exam Conclusion"],
+        "rules_applied": ["Rule 1 (max 2 sessions/day)", "Rule 2 (0 clashes)", "Common Arrears (Opposite Session)", "Uncommon Arrears (After Regular Bunch)"],
     }
     return schedule, stats
 
@@ -131,12 +135,12 @@ def _place_arrear(schedule, used_slots, student_slots, days_used,
         "semester": sem,
         "year": (sem + 1) // 2,
         "branches": branches,
-        "is_shared": False,
+        "is_shared": len(branches) > 1,
         "is_arrear": True,
         "difficulty": "medium",
         "credits": 3,
         "roll_ranges": {},
-        "student_reg_nos": list(set(reg_nos)),  # Store exact enrolled student reg_nos
+        "student_reg_nos": list(set(reg_nos)),
     })
     slot_key = (d, sess)
     used_slots.add(slot_key)

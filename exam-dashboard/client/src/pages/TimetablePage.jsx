@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 import PrintScheduleModal from '../components/PrintScheduleModal'
-import * as XLSX from 'xlsx'
 
 const SESSION_TIMINGS = { FN: '9:30 AM – 12:30 PM', AN: '1:30 PM – 4:30 PM' }
 
@@ -11,17 +10,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 const ALL_DEPTS = ['CSE', 'ECE', 'EEE', 'MECH', 'IT', 'AIDS', 'AIML', 'CCE', 'CYSE', 'CSBS']
 
-const DEPT_COLORS = {
-  CSE:  { border: '#93c5fd', bg: '#dbeafe', text: '#1e3a8a', badge: '#1e40af', hexBg: '#dbeafe', hexBadge: '#1e40af' },
-  ECE:  { border: '#6ee7b7', bg: '#d1fae5', text: '#065f46', badge: '#047857', hexBg: '#d1fae5', hexBadge: '#047857' },
-  EEE:  { border: '#fdba74', bg: '#ffedd5', text: '#9a3412', badge: '#c2410c', hexBg: '#ffedd5', hexBadge: '#c2410c' },
-  MECH: { border: '#d8b4fe', bg: '#f3e8ff', text: '#581c87', badge: '#6b21a8', hexBg: '#f3e8ff', hexBadge: '#6b21a8' },
-  IT:   { border: '#7dd3fc', bg: '#e0e7fe', text: '#0369a1', badge: '#0284c7', hexBg: '#e0e7fe', hexBadge: '#0284c7' },
-  AIDS: { border: '#5eead4', bg: '#ccfbf1', text: '#115e59', badge: '#0f766e', hexBg: '#ccfbf1', hexBadge: '#0f766e' },
-  AIML: { border: '#a5b4fc', bg: '#e0e7ff', text: '#3730a3', badge: '#4338ca', hexBg: '#e0e7ff', hexBadge: '#4338ca' },
-  CCE:  { border: '#fca5a5', bg: '#fee2e2', text: '#991b1b', badge: '#b91c1c', hexBg: '#fee2e2', hexBadge: '#b91c1c' },
-  CYSE: { border: '#bef264', bg: '#ecfccb', text: '#3f6212', badge: '#4d7c0f', hexBg: '#ecfccb', hexBadge: '#4d7c0f' },
-  CSBS: { border: '#fbcfe8', bg: '#fce7f3', text: '#9d174d', badge: '#be185d', hexBg: '#fce7f3', hexBadge: '#be185d' },
+// Year-Wise Color Coding Map (Matching 1. Consolidated ESE Schedule Structure)
+const YEAR_COLORS = {
+  1: { label: 'I Year (Sem 1/2)',   border: '#93c5fd', bg: '#dbeafe', text: '#1e3a8a', badge: '#1d4ed8', hexBg: '#dbeafe', hexBadge: '#1d4ed8' },
+  2: { label: 'II Year (Sem 3/4)',  border: '#c084fc', bg: '#f3e8ff', text: '#581c87', badge: '#7c3aed', hexBg: '#f3e8ff', hexBadge: '#7c3aed' },
+  3: { label: 'III Year (Sem 5/6)', border: '#6ee7b7', bg: '#d1fae5', text: '#065f46', badge: '#059669', hexBg: '#d1fae5', hexBadge: '#059669' },
+  4: { label: 'IV Year (Sem 7/8)',  border: '#fdba74', bg: '#ffedd5', text: '#9a3412', badge: '#d97706', hexBg: '#ffedd5', hexBadge: '#d97706' },
+  arrear: { label: 'Arrear Exam',  border: '#f59e0b', bg: '#fef3c7', text: '#78350f', badge: '#b45309', hexBg: '#fef3c7', hexBadge: '#b45309' },
 }
 
 function formatDate(dateStr) {
@@ -118,7 +113,7 @@ export default function TimetablePage() {
     return map
   }, [sortedDates, examsByDate])
 
-  // Color-coded Master Excel Export (.xls HTML Spreadsheet Blob compatible with Excel, Google Sheets, LibreOffice)
+  // Year-wise Color-Coded Master Excel Export (.xls HTML Spreadsheet Blob)
   const exportConsolidatedExcel = () => {
     const activeDepts = deptFilter === 'ALL' ? ALL_DEPTS : [deptFilter]
 
@@ -137,14 +132,12 @@ export default function TimetablePage() {
           .col-day { font-weight: bold; background-color: #f1f5f9; color: #475569; }
           .ses-fn { background-color: #dbeafe; color: #1e40af; font-weight: bold; }
           .ses-an { background-color: #fef3c7; color: #b45309; font-weight: bold; }
-          .cell-arrear { background-color: #fef3c7; color: #78350f; font-weight: bold; border: 1.5px solid #f59e0b; }
-          .cell-shared { background-color: #e0f2fe; color: #0369a1; font-weight: bold; border: 1.5px solid #38bdf8; }
         </style>
       </head>
       <body>
         <table>
           <tr><td colspan="${activeDepts.length + 3}" class="title-main">SRI ESHWAR COLLEGE OF ENGINEERING (AUTONOMOUS)</td></tr>
-          <tr><td colspan="${activeDepts.length + 3}" class="title-sub">AUTONOMOUS SEMESTER END EXAMINATION MASTER SCHEDULE — APRIL / MAY 2026</td></tr>
+          <tr><td colspan="${activeDepts.length + 3}" class="title-sub">AUTONOMOUS SEMESTER END EXAMINATION CONSOLIDATED SCHEDULE — APRIL / MAY 2026</td></tr>
           <tr><td colspan="${activeDepts.length + 3}" style="background-color:#ffffff; height:10px;"></td></tr>
           <tr style="background-color:#0f172a; color:#ffffff;">
             <th style="background-color:#0f172a; color:#ffffff;">Date</th>
@@ -153,8 +146,7 @@ export default function TimetablePage() {
     `
 
     activeDepts.forEach(d => {
-      const c = DEPT_COLORS[d]
-      tableHtml += `<th style="background-color:${c.hexBadge}; color:#ffffff; font-weight:bold; font-size:13px; min-width:130px;">${d}</th>`
+      tableHtml += `<th style="background-color:#1e293b; color:#ffffff; font-weight:bold; font-size:13px; min-width:130px;">${d}</th>`
     })
 
     tableHtml += `</tr>`
@@ -167,25 +159,23 @@ export default function TimetablePage() {
 
       activeDepts.forEach(dept => {
         const exams = row.deptMap[dept] || []
-        const c = DEPT_COLORS[dept]
 
         if (exams.length === 0) {
           tableHtml += `<td style="color:#cbd5e1;">—</td>`
         } else {
-          let cellHtml = `<td style="background-color:${c.hexBg}; color:${c.text}; font-weight:600; text-align:left;">`
-          exams.forEach((e, idx) => {
+          let cellHtml = `<td style="vertical-align:top; text-align:left;">`
+          exams.forEach((e) => {
             const isArrear = e.is_arrear
             const isShared = e.is_shared
-            const bg = isArrear ? '#fef3c7' : isShared ? '#e0f2fe' : c.hexBg
-            const border = isArrear ? '#f59e0b' : isShared ? '#38bdf8' : c.border
-            const txt = isArrear ? '#78350f' : isShared ? '#0369a1' : c.text
+            const yearKey = isArrear ? 'arrear' : (e.year || 2)
+            const c = YEAR_COLORS[yearKey] || YEAR_COLORS[2]
 
             cellHtml += `
-              <div style="background-color:${bg}; border:1px solid ${border}; color:${txt}; padding:4px 6px; margin-bottom:4px; border-radius:4px;">
+              <div style="background-color:${c.hexBg}; border:1.5px solid ${c.border}; color:${c.text}; padding:5px 7px; margin-bottom:4px; border-radius:4px;">
                 <div style="font-family:monospace; font-weight:bold; font-size:11px;">
-                  ${e.course_code} ${isArrear ? '<span style="color:#b45309;">[ARREAR]</span>' : `<span style="color:${c.hexBadge};">[SEM ${e.semester}]</span>`}
+                  ${e.course_code} <span style="color:#ffffff; background-color:${c.hexBadge}; padding:1px 4px; border-radius:3px; font-size:9px;">${isArrear ? 'ARREAR' : `SEM ${e.semester}`}</span>
                 </div>
-                <div style="font-size:10px; color:#334155;">${e.course_name}</div>
+                <div style="font-size:10px; color:#334155; margin-top:2px;">${e.course_name}</div>
                 ${isShared ? `<div style="font-size:9px; color:#0284c7; font-weight:bold;">🩵 Shared (${e.branches?.length} Depts)</div>` : ''}
               </div>
             `
@@ -203,7 +193,7 @@ export default function TimetablePage() {
     const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = 'Color_Coded_Consolidated_Master_Schedule.xls'
+    a.download = 'Year_Wise_Color_Consolidated_Master_Schedule.xls'
     a.click()
   }
 
@@ -249,7 +239,7 @@ export default function TimetablePage() {
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn" onClick={exportConsolidatedExcel} style={{ background: '#047857', color: '#fff', border: 'none', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>🎨</span> Export Color-Coded Master Excel (.xls)
+            <span>🎨</span> Export Year-Wise Color Excel (.xls)
           </button>
           <button className="btn btn-secondary" onClick={exportCSV}>
             📥 CSV Export
@@ -336,32 +326,32 @@ export default function TimetablePage() {
             </div>
           </div>
 
-          {/* Department Legend Bar */}
+          {/* Year-Wise Color Legend Bar */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', alignSelf: 'center' }}>DEPT COLOR MAP:</span>
-            {ALL_DEPTS.map(d => {
-              const c = DEPT_COLORS[d]
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', alignSelf: 'center' }}>YEAR COLOR MAP:</span>
+            {[1, 2, 3, 4].map(yr => {
+              const c = YEAR_COLORS[yr]
               return (
                 <span
-                  key={d}
+                  key={yr}
                   style={{
                     background: c.bg,
                     color: c.text,
                     border: `1px solid ${c.border}`,
                     borderRadius: 4,
-                    padding: '2px 8px',
+                    padding: '3px 10px',
                     fontSize: 11,
                     fontWeight: 700
                   }}
                 >
-                  {d}
+                  {c.label}
                 </span>
               )
             })}
-            <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>
+            <span style={{ background: '#fef3c7', color: '#78350f', border: '1px solid #f59e0b', borderRadius: 4, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>
               ⚡ Arrear Exam
             </span>
-            <span style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>
+            <span style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc', borderRadius: 4, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>
               🩵 Shared Multi-Branch
             </span>
           </div>
@@ -377,24 +367,21 @@ export default function TimetablePage() {
                     <th style={{ padding: '10px 12px', border: '1px solid #334155', minWidth: 100 }}>Date</th>
                     <th style={{ padding: '10px 8px', border: '1px solid #334155', minWidth: 50 }}>Day</th>
                     <th style={{ padding: '10px 8px', border: '1px solid #334155', minWidth: 55 }}>Ses</th>
-                    {activeDepts.map(dept => {
-                      const c = DEPT_COLORS[dept]
-                      return (
-                        <th
-                          key={dept}
-                          style={{
-                            padding: '10px 14px',
-                            border: '1px solid #334155',
-                            minWidth: 140,
-                            background: c.badge,
-                            color: '#ffffff',
-                            fontWeight: 800
-                          }}
-                        >
-                          {dept}
-                        </th>
-                      )
-                    })}
+                    {activeDepts.map(dept => (
+                      <th
+                        key={dept}
+                        style={{
+                          padding: '10px 14px',
+                          border: '1px solid #334155',
+                          minWidth: 140,
+                          background: '#1e293b',
+                          color: '#ffffff',
+                          fontWeight: 800
+                        }}
+                      >
+                        {dept}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -424,7 +411,6 @@ export default function TimetablePage() {
 
                       {activeDepts.map(dept => {
                         const exams = row.deptMap[dept] || []
-                        const c = DEPT_COLORS[dept]
 
                         return (
                           <td
@@ -443,14 +429,16 @@ export default function TimetablePage() {
                                 {exams.map((e, eIdx) => {
                                   const isArrear = e.is_arrear
                                   const isShared = e.is_shared
+                                  const yearKey = isArrear ? 'arrear' : (e.year || 2)
+                                  const c = YEAR_COLORS[yearKey] || YEAR_COLORS[2]
 
                                   return (
                                     <div
                                       key={eIdx}
                                       style={{
-                                        background: isArrear ? '#fef3c7' : isShared ? '#e0f2fe' : c.bg,
-                                        border: `1.5px solid ${isArrear ? '#f59e0b' : isShared ? '#38bdf8' : c.border}`,
-                                        color: isArrear ? '#78350f' : isShared ? '#0369a1' : c.text,
+                                        background: c.bg,
+                                        border: `1.5px solid ${c.border}`,
+                                        color: c.text,
                                         borderRadius: 6,
                                         padding: '6px 8px',
                                         fontSize: 11,
@@ -463,7 +451,7 @@ export default function TimetablePage() {
                                         </span>
                                         <span style={{
                                           fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
-                                          background: isArrear ? '#b45309' : c.badge, color: '#ffffff'
+                                          background: c.badge, color: '#ffffff'
                                         }}>
                                           {isArrear ? 'ARREAR' : `SEM ${e.semester}`}
                                         </span>

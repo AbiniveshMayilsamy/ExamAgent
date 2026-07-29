@@ -16,7 +16,7 @@ const DEPT_COLORS = {
   ECE:  { border: '#6ee7b7', bg: '#d1fae5', text: '#065f46', badge: '#047857' },
   EEE:  { border: '#fdba74', bg: '#ffedd5', text: '#9a3412', badge: '#c2410c' },
   MECH: { border: '#d8b4fe', bg: '#f3e8ff', text: '#581c87', badge: '#6b21a8' },
-  IT:   { border: '#7dd3fc', bg: '#e0f2fe', text: '#0369a1', badge: '#0284c7' },
+  IT:   { border: '#7dd3fc', bg: '#e0e7fe', text: '#0369a1', badge: '#0284c7' },
   AIDS: { border: '#5eead4', bg: '#ccfbf1', text: '#115e59', badge: '#0f766e' },
   AIML: { border: '#a5b4fc', bg: '#e0e7ff', text: '#3730a3', badge: '#4338ca' },
   CCE:  { border: '#fca5a5', bg: '#fee2e2', text: '#991b1b', badge: '#b91c1c' },
@@ -26,6 +26,7 @@ const DEPT_COLORS = {
 
 function formatDate(dateStr) {
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
   const dayName = DAY_NAMES[d.getDay()]
   const day = d.getDate()
   const month = d.getMonth() + 1
@@ -41,25 +42,32 @@ function formatDateDot(dateStr) {
 
 function getMonthYear(dateStr) {
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return 'Scheduled Period'
   return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
 export default function TimetablePage() {
-  const { schedule, conflicts, deptRollRanges, stats, students } = usePipelineContext()
+  const pipeline = usePipelineContext() || {}
+  const { schedule = [], conflicts = [], deptRollRanges = {}, stats = {}, students = [] } = pipeline
+  
   const [expandedDay, setExpandedDay] = useState(null)
   const [viewMode, setViewMode] = useState('matrix') // 'matrix', 'timeline', 'table'
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
   const [deptFilter, setDeptFilter] = useState('ALL')
 
+  const safeSchedule = useMemo(() => (Array.isArray(schedule) ? schedule : []), [schedule])
+
   // Group exams by date
   const examsByDate = useMemo(() => {
     const map = {}
-    schedule.forEach(e => {
-      if (!map[e.date]) map[e.date] = []
-      map[e.date].push(e)
+    safeSchedule.forEach(e => {
+      if (e && e.date) {
+        if (!map[e.date]) map[e.date] = []
+        map[e.date].push(e)
+      }
     })
     return map
-  }, [schedule])
+  }, [safeSchedule])
 
   const sortedDates = useMemo(() => Object.keys(examsByDate).sort(), [examsByDate])
 
@@ -68,10 +76,10 @@ export default function TimetablePage() {
     const rows = []
     sortedDates.forEach(dateStr => {
       const d = new Date(dateStr)
-      const dayShort = DAY_NAMES[d.getDay()].slice(0, 3)
+      const dayShort = !isNaN(d.getTime()) ? DAY_NAMES[d.getDay()].slice(0, 3) : ''
       const dateFormatted = formatDateDot(dateStr)
 
-      ['FN', 'AN'].forEach(sess => {
+      ;['FN', 'AN'].forEach(sess => {
         const rowExams = (examsByDate[dateStr] || []).filter(e => e.session === sess)
         if (rowExams.length === 0) return
 
@@ -100,7 +108,7 @@ export default function TimetablePage() {
     sortedDates.forEach(date => {
       const monthKey = getMonthYear(date)
       if (!map[monthKey]) map[monthKey] = { count: 0, regular: 0, arrear: 0 }
-      const dayExams = examsByDate[date]
+      const dayExams = examsByDate[date] || []
       map[monthKey].count += dayExams.length
       dayExams.forEach(e => {
         if (e.is_arrear) map[monthKey].arrear++
@@ -151,7 +159,7 @@ export default function TimetablePage() {
 
   const exportCSV = () => {
     const headers = ['Date', 'Session', 'Time', 'Course Code', 'Course Name', 'Semester', 'Year', 'Branches', 'Type']
-    const rows = schedule.sort((a, b) => a.date > b.date ? 1 : -1).map(e => [
+    const rows = [...safeSchedule].sort((a, b) => a.date > b.date ? 1 : -1).map(e => [
       e.date, e.session, SESSION_TIMINGS[e.session], e.course_code, e.course_name,
       e.semester, e.year, (e.branches || []).join('; '), e.is_arrear ? 'Arrear' : 'Regular',
     ])
@@ -163,7 +171,7 @@ export default function TimetablePage() {
     a.click()
   }
 
-  if (schedule.length === 0) {
+  if (safeSchedule.length === 0) {
     return (
       <div>
         <div className="page-header"><h1>Timetable</h1></div>
@@ -186,7 +194,7 @@ export default function TimetablePage() {
         <div>
           <h1>Master Exam Timetable & Visualizer</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>
-            {stats.totalExams} regular courses · {stats.totalArrears} arrear courses · {sortedDates.length} exam days
+            {stats.totalExams || safeSchedule.filter(e => !e.is_arrear).length} regular courses · {stats.totalArrears || safeSchedule.filter(e => e.is_arrear).length} arrear courses · {sortedDates.length} exam days
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -206,7 +214,7 @@ export default function TimetablePage() {
       </div>
 
       <PrintScheduleModal
-        schedule={schedule}
+        schedule={safeSchedule}
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
       />
@@ -441,7 +449,7 @@ export default function TimetablePage() {
           <div className="card">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {sortedDates.map(date => {
-                const dayExams = examsByDate[date]
+                const dayExams = examsByDate[date] || []
                 const isExpanded = expandedDay === date
                 const totalStudents = dayExams.reduce((sum, e) => sum + (e.studentCount || 60), 0)
 
@@ -463,8 +471,8 @@ export default function TimetablePage() {
                           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                           fontSize: 10, fontWeight: 700, lineHeight: 1.2,
                         }}>
-                          <div>{new Date(date).getDate()}</div>
-                          <div>{MONTHS[new Date(date).getMonth()].slice(0, 3)}</div>
+                          <div>{!isNaN(new Date(date).getTime()) ? new Date(date).getDate() : '—'}</div>
+                          <div>{!isNaN(new Date(date).getTime()) ? MONTHS[new Date(date).getMonth()].slice(0, 3) : ''}</div>
                         </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
@@ -536,7 +544,7 @@ export default function TimetablePage() {
                 </tr>
               </thead>
               <tbody>
-                {schedule.sort((a, b) => a.date > b.date ? 1 : -1).map((e, idx) => (
+                {[...safeSchedule].sort((a, b) => a.date > b.date ? 1 : -1).map((e, idx) => (
                   <tr key={idx}>
                     <td>{formatDateDot(e.date)}</td>
                     <td><span className={`badge ${e.session === 'FN' ? 'badge-blue' : 'badge-yellow'}`}>{e.session}</span></td>

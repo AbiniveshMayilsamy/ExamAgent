@@ -1,22 +1,13 @@
 """
 agent5_spacing.py — Agent 5: Spacing & Difficulty Evaluator
-Rules: Rule 1 (min 1-day gap = Mon→Wed, i.e. ≥2 calendar days between exam dates),
-       Rule 9 (hard/high-credit courses get 2-day buffer = 3 calendar days gap).
-
-Stats emitted:
-  exams_moved, hard_courses_repositioned, final_date_range
+Rules:
+  Rule 1 — Min 1-day gap (Mon exam -> next on Wed, i.e. >= 2 calendar days between exam dates)
+  Rule 9 — Hard/high-credit courses get 2-day buffer (3 calendar days gap)
+  Gap Utilization — Pull courses forward into any natural gaps to eliminate excess days and finish exams in minimum duration
 """
 from datetime import date, timedelta
 from collections import defaultdict
 from config import GAP_REGULAR_MIN, GAP_HARD_COURSE, sem_to_year
-
-
-def _push_date(from_date: date, min_gap: int, blocked: set[str]) -> str:
-    """Return earliest date >= from_date + min_gap not in blocked."""
-    candidate = from_date + timedelta(days=min_gap)
-    while candidate.isoformat() in blocked:
-        candidate += timedelta(days=1)
-    return candidate.isoformat()
 
 
 def apply_spacing_rules(
@@ -24,14 +15,7 @@ def apply_spacing_rules(
     difficulty_map: dict,
 ) -> tuple[list[dict], dict]:
     """
-    Enforce gap rules on regular exams.
-
-    Rule 1: consecutive exams for the same branch+year must be ≥ GAP_REGULAR_MIN
-            calendar days apart (default 2 → Mon exam, next on Wed).
-    Rule 9: if a course is 'hard' OR credits >= 4, enforce GAP_HARD_COURSE (default 3).
-
-    Returns:
-        (spaced_schedule, stats)
+    Enforce gap rules on regular exams and pack them into available gap spaces.
     """
     schedule = [dict(e) for e in draft_schedule]
 
@@ -39,7 +23,6 @@ def apply_spacing_rules(
         code = entry["course_code"]
         diff = difficulty_map.get(code, "medium")
         credits = entry.get("credits", 3)
-        # High-credit courses treated as hard
         if credits >= 4:
             diff = "hard"
         entry["difficulty"] = diff
@@ -53,7 +36,6 @@ def apply_spacing_rules(
                     groups[(branch, yr)].append(entry)
         return groups
 
-    # Track (branch, date, session) to prevent cross-year same-branch slot collisions
     def build_branch_session_used(sched):
         bsu = set()
         for entry in sched:
@@ -63,7 +45,6 @@ def apply_spacing_rules(
         return bsu
 
     def find_free_date(from_date: date, min_gap: int, branches: list, session: str, sched: list) -> str:
-        """Find earliest date >= from_date+min_gap where no branch has an exam in session."""
         bsu = build_branch_session_used(sched)
         candidate = from_date + timedelta(days=min_gap)
         while any((br, candidate.isoformat(), session) in bsu for br in branches):
@@ -72,6 +53,7 @@ def apply_spacing_rules(
 
     exams_moved = 0
 
+    # 1. Enforce minimum required gaps
     changed = True
     iterations = 0
     while changed and iterations < 60:
@@ -92,7 +74,6 @@ def apply_spacing_rules(
                 required = GAP_HARD_COURSE if b["difficulty"] == "hard" else GAP_REGULAR_MIN
 
                 if gap < required:
-                    # Temporarily remove b from schedule so find_free_date doesn't block on b's own slot
                     b_code = b["course_code"]
                     b_session = b["session"]
                     b_branches = b["branches"]
@@ -109,9 +90,9 @@ def apply_spacing_rules(
                     changed = True
                     break
 
-    # Rule 9: pull hard courses forward into natural gaps
+    # 2. Pull courses forward into any natural gaps larger than required gap
     groups = get_groups(schedule)
-    hard_repositioned = 0
+    courses_pulled = 0
     for (branch, year), exams in groups.items():
         exams_sorted = sorted(exams, key=lambda e: e["date"])
         for i in range(len(exams_sorted) - 1):
@@ -120,28 +101,24 @@ def apply_spacing_rules(
             date_a = date.fromisoformat(a["date"])
             date_b = date.fromisoformat(b["date"])
             gap = (date_b - date_a).days
+            required = GAP_HARD_COURSE if b["difficulty"] == "hard" else GAP_REGULAR_MIN
 
-            if gap > GAP_HARD_COURSE:
-                ideal = (date_a + timedelta(days=GAP_HARD_COURSE)).isoformat()
+            if gap > required:
+                ideal_date = (date_a + timedelta(days=required)).isoformat()
                 bsu = build_branch_session_used(schedule)
-                for j in range(i + 2, len(exams_sorted)):
-                    cand = exams_sorted[j]
-                    if cand["difficulty"] == "hard" and cand["date"] > ideal:
-                        # Only move if ideal slot is free for all branches
-                        if not any((br, ideal, cand["session"]) in bsu for br in cand["branches"]):
-                            for entry in schedule:
-                                if entry["course_code"] == cand["course_code"] and not entry.get("is_arrear"):
-                                    entry["date"] = ideal
-                            hard_repositioned += 1
-                        break
+                if not any((br, ideal_date, b["session"]) in bsu for br in b["branches"]):
+                    for entry in schedule:
+                        if entry["course_code"] == b["course_code"] and not entry.get("is_arrear"):
+                            entry["date"] = ideal_date
+                    courses_pulled += 1
 
     all_dates = sorted({e["date"] for e in schedule if not e.get("is_arrear")})
     stats = {
         "exams_moved": exams_moved,
-        "hard_courses_repositioned": hard_repositioned,
+        "courses_pulled_forward": courses_pulled,
         "final_date_range": f"{all_dates[0]} → {all_dates[-1]}" if all_dates else "—",
         "total_exam_days": len(all_dates),
         "function_type": "Gap & Difficulty Enforcer",
-        "rules_applied": ["Rule 1 (min 1-day gap = Mon→Wed)", "Rule 9 (hard/high-credit 2-day buffer)"],
+        "rules_applied": ["Rule 1 (min 1-day gap)", "Rule 9 (hard 2-day buffer)", "Gap Compression (Maximum Space Utilization)"],
     }
     return schedule, stats

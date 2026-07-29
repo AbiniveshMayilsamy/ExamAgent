@@ -12,16 +12,16 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const ALL_DEPTS = ['CSE', 'ECE', 'EEE', 'MECH', 'IT', 'AIDS', 'AIML', 'CCE', 'CYSE', 'CSBS']
 
 const DEPT_COLORS = {
-  CSE:  { border: '#93c5fd', bg: '#dbeafe', text: '#1e3a8a', badge: '#1e40af' },
-  ECE:  { border: '#6ee7b7', bg: '#d1fae5', text: '#065f46', badge: '#047857' },
-  EEE:  { border: '#fdba74', bg: '#ffedd5', text: '#9a3412', badge: '#c2410c' },
-  MECH: { border: '#d8b4fe', bg: '#f3e8ff', text: '#581c87', badge: '#6b21a8' },
-  IT:   { border: '#7dd3fc', bg: '#e0e7fe', text: '#0369a1', badge: '#0284c7' },
-  AIDS: { border: '#5eead4', bg: '#ccfbf1', text: '#115e59', badge: '#0f766e' },
-  AIML: { border: '#a5b4fc', bg: '#e0e7ff', text: '#3730a3', badge: '#4338ca' },
-  CCE:  { border: '#fca5a5', bg: '#fee2e2', text: '#991b1b', badge: '#b91c1c' },
-  CYSE: { border: '#bef264', bg: '#ecfccb', text: '#3f6212', badge: '#4d7c0f' },
-  CSBS: { border: '#fbcfe8', bg: '#fce7f3', text: '#9d174d', badge: '#be185d' },
+  CSE:  { border: '#93c5fd', bg: '#dbeafe', text: '#1e3a8a', badge: '#1e40af', hexBg: '#dbeafe', hexBadge: '#1e40af' },
+  ECE:  { border: '#6ee7b7', bg: '#d1fae5', text: '#065f46', badge: '#047857', hexBg: '#d1fae5', hexBadge: '#047857' },
+  EEE:  { border: '#fdba74', bg: '#ffedd5', text: '#9a3412', badge: '#c2410c', hexBg: '#ffedd5', hexBadge: '#c2410c' },
+  MECH: { border: '#d8b4fe', bg: '#f3e8ff', text: '#581c87', badge: '#6b21a8', hexBg: '#f3e8ff', hexBadge: '#6b21a8' },
+  IT:   { border: '#7dd3fc', bg: '#e0e7fe', text: '#0369a1', badge: '#0284c7', hexBg: '#e0e7fe', hexBadge: '#0284c7' },
+  AIDS: { border: '#5eead4', bg: '#ccfbf1', text: '#115e59', badge: '#0f766e', hexBg: '#ccfbf1', hexBadge: '#0f766e' },
+  AIML: { border: '#a5b4fc', bg: '#e0e7ff', text: '#3730a3', badge: '#4338ca', hexBg: '#e0e7ff', hexBadge: '#4338ca' },
+  CCE:  { border: '#fca5a5', bg: '#fee2e2', text: '#991b1b', badge: '#b91c1c', hexBg: '#fee2e2', hexBadge: '#b91c1c' },
+  CYSE: { border: '#bef264', bg: '#ecfccb', text: '#3f6212', badge: '#4d7c0f', hexBg: '#ecfccb', hexBadge: '#4d7c0f' },
+  CSBS: { border: '#fbcfe8', bg: '#fce7f3', text: '#9d174d', badge: '#be185d', hexBg: '#fce7f3', hexBadge: '#be185d' },
 }
 
 function formatDate(dateStr) {
@@ -118,43 +118,93 @@ export default function TimetablePage() {
     return map
   }, [sortedDates, examsByDate])
 
-  // Export Consolidated Matrix Excel matching 1. Consolidated ESE_AM2026_Registered Count.xlsx format
+  // Color-coded Master Excel Export (.xls HTML Spreadsheet Blob compatible with Excel, Google Sheets, LibreOffice)
   const exportConsolidatedExcel = () => {
-    const excelData = []
-    
-    // Title headers
-    excelData.push(['Sri Eshwar College of Engineering (Autonomous)'])
-    excelData.push(['Autonomous Semester End Examination Schedule - April / May 2026'])
-    excelData.push(['Consolidated Master Schedule & Candidate Registered Count'])
-    excelData.push([])
+    const activeDepts = deptFilter === 'ALL' ? ALL_DEPTS : [deptFilter]
 
-    // Column header 1
-    const header1 = ['Date', 'Day', 'Ses']
-    ALL_DEPTS.forEach(d => {
-      header1.push(d, 'Count')
+    let tableHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8" />
+        <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Master Schedule</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+        <style>
+          body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; }
+          .title-main { font-size: 16px; font-weight: bold; text-align: center; background-color: #0f172a; color: #ffffff; padding: 12px; }
+          .title-sub { font-size: 13px; font-weight: bold; text-align: center; background-color: #1e293b; color: #cbd5e1; padding: 6px; }
+          th { font-size: 12px; font-weight: bold; text-align: center; vertical-align: middle; padding: 8px; border: 1px solid #334155; }
+          td { font-size: 11px; text-align: center; vertical-align: top; padding: 6px; border: 1px solid #cbd5e1; }
+          .col-date { font-weight: bold; background-color: #f8fafc; color: #0f172a; }
+          .col-day { font-weight: bold; background-color: #f1f5f9; color: #475569; }
+          .ses-fn { background-color: #dbeafe; color: #1e40af; font-weight: bold; }
+          .ses-an { background-color: #fef3c7; color: #b45309; font-weight: bold; }
+          .cell-arrear { background-color: #fef3c7; color: #78350f; font-weight: bold; border: 1.5px solid #f59e0b; }
+          .cell-shared { background-color: #e0f2fe; color: #0369a1; font-weight: bold; border: 1.5px solid #38bdf8; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><td colspan="${activeDepts.length + 3}" class="title-main">SRI ESHWAR COLLEGE OF ENGINEERING (AUTONOMOUS)</td></tr>
+          <tr><td colspan="${activeDepts.length + 3}" class="title-sub">AUTONOMOUS SEMESTER END EXAMINATION MASTER SCHEDULE — APRIL / MAY 2026</td></tr>
+          <tr><td colspan="${activeDepts.length + 3}" style="background-color:#ffffff; height:10px;"></td></tr>
+          <tr style="background-color:#0f172a; color:#ffffff;">
+            <th style="background-color:#0f172a; color:#ffffff;">Date</th>
+            <th style="background-color:#0f172a; color:#ffffff;">Day</th>
+            <th style="background-color:#0f172a; color:#ffffff;">Ses</th>
+    `
+
+    activeDepts.forEach(d => {
+      const c = DEPT_COLORS[d]
+      tableHtml += `<th style="background-color:${c.hexBadge}; color:#ffffff; font-weight:bold; font-size:13px; min-width:130px;">${d}</th>`
     })
-    excelData.push(header1)
 
-    // Data rows
-    matrixGrid.forEach(r => {
-      const row = [r.dateFormatted, r.dayShort, r.session]
-      ALL_DEPTS.forEach(dept => {
-        const exams = r.deptMap[dept] || []
-        if (exams.length > 0) {
-          const codes = exams.map(e => `${e.course_code}${e.is_arrear ? ' [Arr]' : ''}`).join('\n')
-          const counts = exams.map(e => e.student_count || 60).join('\n')
-          row.push(codes, counts)
+    tableHtml += `</tr>`
+
+    matrixGrid.forEach(row => {
+      tableHtml += `<tr>`
+      tableHtml += `<td class="col-date">${row.dateFormatted}</td>`
+      tableHtml += `<td class="col-day">${row.dayShort}</td>`
+      tableHtml += `<td class="${row.session === 'FN' ? 'ses-fn' : 'ses-an'}">${row.session}</td>`
+
+      activeDepts.forEach(dept => {
+        const exams = row.deptMap[dept] || []
+        const c = DEPT_COLORS[dept]
+
+        if (exams.length === 0) {
+          tableHtml += `<td style="color:#cbd5e1;">—</td>`
         } else {
-          row.push('-', '-')
+          let cellHtml = `<td style="background-color:${c.hexBg}; color:${c.text}; font-weight:600; text-align:left;">`
+          exams.forEach((e, idx) => {
+            const isArrear = e.is_arrear
+            const isShared = e.is_shared
+            const bg = isArrear ? '#fef3c7' : isShared ? '#e0f2fe' : c.hexBg
+            const border = isArrear ? '#f59e0b' : isShared ? '#38bdf8' : c.border
+            const txt = isArrear ? '#78350f' : isShared ? '#0369a1' : c.text
+
+            cellHtml += `
+              <div style="background-color:${bg}; border:1px solid ${border}; color:${txt}; padding:4px 6px; margin-bottom:4px; border-radius:4px;">
+                <div style="font-family:monospace; font-weight:bold; font-size:11px;">
+                  ${e.course_code} ${isArrear ? '<span style="color:#b45309;">[ARREAR]</span>' : `<span style="color:${c.hexBadge};">[SEM ${e.semester}]</span>`}
+                </div>
+                <div style="font-size:10px; color:#334155;">${e.course_name}</div>
+                ${isShared ? `<div style="font-size:9px; color:#0284c7; font-weight:bold;">🩵 Shared (${e.branches?.length} Depts)</div>` : ''}
+              </div>
+            `
+          })
+          cellHtml += `</td>`
+          tableHtml += cellHtml
         }
       })
-      excelData.push(row)
+
+      tableHtml += `</tr>`
     })
 
-    const ws = XLSX.utils.aoa_to_sheet(excelData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Consolidated Schedule')
-    XLSX.writeFile(wb, 'Consolidated_ESE_Master_Schedule.xlsx')
+    tableHtml += `</table></body></html>`
+
+    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'Color_Coded_Consolidated_Master_Schedule.xls'
+    a.click()
   }
 
   const exportCSV = () => {
@@ -198,8 +248,8 @@ export default function TimetablePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn" onClick={exportConsolidatedExcel} style={{ background: '#047857', color: '#fff', border: 'none', fontWeight: 700 }}>
-            📊 Export Consolidated Matrix (.xlsx)
+          <button className="btn" onClick={exportConsolidatedExcel} style={{ background: '#047857', color: '#fff', border: 'none', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🎨</span> Export Color-Coded Master Excel (.xls)
           </button>
           <button className="btn btn-secondary" onClick={exportCSV}>
             📥 CSV Export

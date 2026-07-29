@@ -8,6 +8,7 @@ Features:
 - Authoritative 12-digit Register Number department mapping (REG_DEPT_MAP).
 - Lateral Entry (LE) rule enforcement (LE students joined in Sem 3, Sem 1/2 arrears discarded).
 - Course Code Semester Inferencing (e.g., U23EC384 -> Sem 3, U23CS494 -> Sem 4, U23MA209 -> Sem 4, U23OME06 -> Sem 4).
+- Cyber Security department code harmonization ('149' / 'CYS' / 'CYSE' -> 'CYSE').
 - Active scheduled year filtering (only process arrears for loaded active years).
 - Department normalization ('AI&DS' -> 'AIDS').
 - Student Master Database building (RegNo / RollNo indexing).
@@ -21,7 +22,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from config import sem_to_year
 
-KNOWN_DEPTS = ["AIDS", "AIML", "CCE", "CSBS", "CYS", "ECE", "EEE", "CSE", "IT", "MECH"]
+KNOWN_DEPTS = ["AIDS", "AIML", "CCE", "CSBS", "CYSE", "ECE", "EEE", "CSE", "IT", "MECH"]
 
 # Official Anna University / Sri Eshwar 3-digit department code map
 REG_DEPT_MAP = {
@@ -31,7 +32,7 @@ REG_DEPT_MAP = {
     '114': 'MECH',
     '134': 'CCE',
     '148': 'AIML',
-    '149': 'CYS',
+    '149': 'CYSE',
     '205': 'IT',
     '243': 'AIDS',
     '244': 'CSBS',
@@ -52,8 +53,8 @@ def normalize_dept(dept_str: str) -> str:
         return "AIML"
     if clean in ["CSBS", "BUSINESS SYSTEMS"]:
         return "CSBS"
-    if clean in ["CYS", "CYSE", "CYBER", "CYBER SECURITY"]:
-        return "CYS"
+    if clean in ["CYS", "CYSE", "CYBER", "CYBER SECURITY", "CSE CYBER SECURITY", "CYBERSECURITY"]:
+        return "CYSE"
     if clean in ["CCE", "COMPUTER AND COMMUNICATION ENGINEERING"]:
         return "CCE"
     if clean in ["CSE", "CSE A", "CSE B", "CSE C", "COMPUTER SCIENCE"]:

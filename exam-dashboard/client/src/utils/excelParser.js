@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 
-const KNOWN_DEPTS = ["AIDS", "AIML", "CCE", "CSBS", "CYS", "ECE", "EEE", "CSE", "IT", "MECH"]
+const KNOWN_DEPTS = ["AIDS", "AIML", "CCE", "CSBS", "CYSE", "ECE", "EEE", "CSE", "IT", "MECH"]
 
 const REG_DEPT_MAP = {
   '104': 'CSE',
@@ -9,7 +9,7 @@ const REG_DEPT_MAP = {
   '114': 'MECH',
   '134': 'CCE',
   '148': 'AIML',
-  '149': 'CYS',
+  '149': 'CYSE',
   '205': 'IT',
   '243': 'AIDS',
   '244': 'CSBS',
@@ -24,7 +24,7 @@ export function normalizeDept(deptStr) {
   if (['AIDS', 'AIDS A', 'AIDS B', 'AI&DS', 'ARTIFICIAL INTELLIGENCE AND DATA SCIENCE', 'ARTIFICIAL INTELLIGENCE AND DATA'].includes(clean)) return 'AIDS'
   if (['AIML', 'AIML A', 'AIML B', 'AI-ML', 'MACHINE LEARNING'].includes(clean)) return 'AIML'
   if (['CSBS', 'BUSINESS SYSTEMS'].includes(clean)) return 'CSBS'
-  if (['CYS', 'CYSE', 'CYBER', 'CYBER SECURITY'].includes(clean)) return 'CYS'
+  if (['CYS', 'CYSE', 'CYBER', 'CYBER SECURITY', 'CSE CYBER SECURITY', 'CYBERSECURITY'].includes(clean)) return 'CYSE'
   if (['CCE', 'COMPUTER AND COMMUNICATION ENGINEERING'].includes(clean)) return 'CCE'
   if (['CSE', 'CSE A', 'CSE B', 'CSE C', 'COMPUTER SCIENCE'].includes(clean)) return 'CSE'
   if (['ECE', 'ECE A', 'ECE B', 'ECE C', 'ELECTRONICS AND COMMUNICATION ENGINEERING'].includes(clean)) return 'ECE'

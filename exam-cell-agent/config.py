@@ -9,13 +9,13 @@ SESSION_TIMINGS = {
     "AN": "1:30 PM – 4:30 PM",
 }
 
-# Rule 10 — Default year-wise session pattern (configurable per run via hub.py args)
-# year (1-4) -> preferred session ("FN" | "AN" | None for no preference)
+# Rule 10 — Default year-wise session pattern
+# Regular exams default to Morning (FN), Arrears default to Evening (AN)
 DEFAULT_YEAR_SESSION_PATTERN = {
     1: "FN",   # 1st year → morning
-    2: "AN",   # 2nd year → afternoon
+    2: "FN",   # 2nd year → morning
     3: "FN",   # 3rd year → morning
-    4: "AN",   # Final year → afternoon
+    4: "FN",   # 4th year → morning
 }
 
 # Rule 3 — Schedule window defaults

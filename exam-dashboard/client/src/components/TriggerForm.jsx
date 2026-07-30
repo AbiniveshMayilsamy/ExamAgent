@@ -1,17 +1,30 @@
 import { useState } from 'react'
 
 export default function TriggerForm({ onTrigger, disabled }) {
+  const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
   
-  // Year Files & Start Dates
+  // Input Files & Start Dates (Odd sem -> 2026-11-02 Nov/Dec, Even sem -> 2026-04-20 Apr/May)
+  const [masterFile, setMasterFile] = useState(null)
+  const [regularFile, setRegularFile] = useState(null)
+  const [arrearFile, setArrearFile] = useState(null)
+  const [startDate, setStartDate] = useState('2026-11-02')
+
+  // Legacy Split Year Files & Start Dates
   const [files, setFiles] = useState({ 1: null, 2: null, 3: null, 4: null })
   const [startDates, setStartDates] = useState({ 1: '2026-11-02', 2: '2026-11-02', 3: '2026-11-02', 4: '2026-11-02' })
-  const [arrearFile, setArrearFile] = useState(null)
   
   const [leaveDays, setLeaveDays] = useState('')
   const [useGroqAI, setUseGroqAI] = useState(true)
   const [humanIntervention, setHumanIntervention] = useState(false)
   const [error, setError] = useState('')
+
+  const handleSemTypeChange = (newSemType) => {
+    setSemType(newSemType)
+    const defaultDate = newSemType === 'odd' ? '2026-11-02' : '2026-04-20'
+    setStartDate(defaultDate)
+    setStartDates({ 1: defaultDate, 2: defaultDate, 3: defaultDate, 4: defaultDate })
+  }
 
   const handleFileChange = (year, file) => {
     setFiles(prev => ({ ...prev, [year]: file }))
@@ -25,11 +38,22 @@ export default function TriggerForm({ onTrigger, disabled }) {
     e.preventDefault()
     setError('')
     
-    // Ensure at least 1 file is selected
-    const hasYearFile = Object.values(files).some(f => f !== null)
-    if (!hasYearFile && !arrearFile) {
-      setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
-      return
+    if (inputMode === 'single') {
+      if (!masterFile) {
+        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
+        return
+      }
+    } else if (inputMode === '2file') {
+      if (!regularFile && !arrearFile) {
+        setError('Please upload at least the Regular Courses file or Arrear file.')
+        return
+      }
+    } else {
+      const hasYearFile = Object.values(files).some(f => f !== null)
+      if (!hasYearFile && !arrearFile) {
+        setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
+        return
+      }
     }
 
     const leaves = leaveDays.split(',').map(d => d.trim()).filter(Boolean)
@@ -39,17 +63,22 @@ export default function TriggerForm({ onTrigger, disabled }) {
     fd.append('leaveDays', JSON.stringify(leaves))
     fd.append('useGroqAI', useGroqAI)
     fd.append('humanIntervention', humanIntervention)
-    fd.append('startDates', JSON.stringify(startDates))
 
-    // Append Year files
-    Object.keys(files).forEach(yr => {
-      if (files[yr]) {
-        fd.append(`year_${yr}`, files[yr])
-      }
-    })
-
-    if (arrearFile) {
-      fd.append('arrear_file', arrearFile)
+    if (inputMode === 'single') {
+      fd.append('regular_file', masterFile)
+      fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+    } else if (inputMode === '2file') {
+      if (regularFile) fd.append('regular_file', regularFile)
+      if (arrearFile) fd.append('arrear_file', arrearFile)
+      fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+    } else {
+      fd.append('startDates', JSON.stringify(startDates))
+      Object.keys(files).forEach(yr => {
+        if (files[yr]) {
+          fd.append(`year_${yr}`, files[yr])
+        }
+      })
+      if (arrearFile) fd.append('arrear_file', arrearFile)
     }
 
     try {
@@ -72,42 +101,109 @@ export default function TriggerForm({ onTrigger, disabled }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Input Mode Selector */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+        <button
+          type="button"
+          onClick={() => setInputMode('single')}
+          style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            background: inputMode === 'single' ? 'linear-gradient(135deg, #10b981, #059669)' : '#1e293b',
+            color: inputMode === 'single' ? '#fff' : '#94a3b8'
+          }}
+        >
+          ⚡ Single File Mode (1 File)
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputMode('2file')}
+          style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            background: inputMode === '2file' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#1e293b',
+            color: inputMode === '2file' ? '#fff' : '#94a3b8'
+          }}
+        >
+          📁 2-File Mode (Regular + Arrear)
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputMode('split')}
+          style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            background: inputMode === 'split' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#1e293b',
+            color: inputMode === 'split' ? '#fff' : '#94a3b8'
+          }}
+        >
+          🗂️ Split Year Files
+        </button>
+      </div>
+
       {/* Semester Type Selector */}
       <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
         <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600, fontSize: 13 }}>Semester Type</label>
         <div style={{ display: 'flex', gap: 20, marginTop: 6 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>
-            <input type="radio" name="semType" value="odd" checked={semType === 'odd'} onChange={() => setSemType('odd')} style={{ accentColor: '#3b82f6' }} />
-            Odd Semesters (Sem 1, 3, 5, 7)
+            <input type="radio" name="semType" value="odd" checked={semType === 'odd'} onChange={() => handleSemTypeChange('odd')} style={{ accentColor: '#3b82f6' }} />
+            Odd Semesters (Nov / Dec 2026 — Sem 1, 3, 5, 7)
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>
-            <input type="radio" name="semType" value="even" checked={semType === 'even'} onChange={() => setSemType('even')} style={{ accentColor: '#3b82f6' }} />
-            Even Semesters (Sem 2, 4, 6, 8)
+            <input type="radio" name="semType" value="even" checked={semType === 'even'} onChange={() => handleSemTypeChange('even')} style={{ accentColor: '#3b82f6' }} />
+            Even Semesters (Apr / May 2026 — Sem 2, 4, 6, 8)
           </label>
         </div>
       </div>
 
-      {/* Year-wise File Inputs & Start Dates */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {[1, 2, 3, 4].map(yr => (
-          <div key={yr} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
-            <div>
-              <label style={lbl}>📁 {yearSemLabels[semType][yr]} File (Optional)</label>
-              <input type="file" accept=".xlsx,.xls,.csv" onChange={e => handleFileChange(yr, e.target.files[0])} style={{ ...inp, padding: '5px' }} />
-            </div>
-            <div>
-              <label style={lbl}>📅 Start Date</label>
-              <input type="date" value={startDates[yr]} onChange={e => handleStartDateChange(yr, e.target.value)} style={inp} />
-            </div>
+      {/* Upload Inputs depending on mode */}
+      {inputMode === 'single' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ background: '#1e293b', padding: 14, borderRadius: 8, border: '1px solid #10b981' }}>
+            <label style={{ ...lbl, color: '#34d399', fontWeight: 700, fontSize: 13 }}>📗 Master Registration Excel File (e.g. Regular_All Courses.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setMasterFile(e.target.files[0])} style={{ ...inp, padding: '6px' }} />
           </div>
-        ))}
-      </div>
 
-      {/* Arrear Exam File */}
-      <div style={{ background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
-        <label style={lbl}>🚨 Arrear Exam File (Optional .xlsx, .csv)</label>
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
-      </div>
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600 }}>📅 Exam Window Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} />
+          </div>
+        </div>
+      ) : inputMode === '2file' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#60a5fa', fontWeight: 600 }}>📗 Regular Courses File (e.g. Regular_All Courses.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setRegularFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+          </div>
+
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#f87171', fontWeight: 600 }}>🚨 Arrear Exam File (e.g. Arrear Details_AM2026.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+          </div>
+
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600 }}>📅 Exam Window Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} />
+          </div>
+        </div>
+      ) : (
+        /* Split Year Files */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[1, 2, 3, 4].map(yr => (
+            <div key={yr} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
+              <div>
+                <label style={lbl}>📁 {yearSemLabels[semType][yr]} File (Optional)</label>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={e => handleFileChange(yr, e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+              </div>
+              <div>
+                <label style={lbl}>📅 Start Date</label>
+                <input type="date" value={startDates[yr]} onChange={e => handleStartDateChange(yr, e.target.value)} style={inp} />
+              </div>
+            </div>
+          ))}
+          <div style={{ background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={lbl}>🚨 Arrear Exam File (Optional .xlsx, .csv)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+          </div>
+        </div>
+      )}
 
       {/* Holidays / Leave Days */}
       <div>

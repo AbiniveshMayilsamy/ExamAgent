@@ -8,10 +8,17 @@ export default function SchedulePage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Semester Type State
+  // Mode & Semester Type State
+  const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
 
-  // Files & Start Dates per Year
+  // Files & Start Dates (Odd sem -> 2026-11-02 Nov/Dec, Even sem -> 2026-04-20 Apr/May)
+  const [masterFile, setMasterFile] = useState(null)
+  const [regularFile, setRegularFile] = useState(null)
+  const [arrearFile, setArrearFile] = useState(null)
+  const [startDate, setStartDate] = useState('2026-11-02')
+
+  // Split Year Files & Start Dates
   const [files, setFiles] = useState({ 1: null, 2: null, 3: null, 4: null })
   const [startDates, setStartDates] = useState({
     1: '2026-11-02',
@@ -19,7 +26,6 @@ export default function SchedulePage() {
     3: '2026-11-02',
     4: '2026-11-02',
   })
-  const [arrearFile, setArrearFile] = useState(null)
 
   // Holidays
   const [holidayInput, setHolidayInput] = useState('')
@@ -32,6 +38,13 @@ export default function SchedulePage() {
   const yearSemLabels = {
     odd: { 1: 'I Year (Semester 1)', 2: 'II Year (Semester 3)', 3: 'III Year (Semester 5)', 4: 'IV Year (Semester 7)' },
     even: { 1: 'I Year (Semester 2)', 2: 'II Year (Semester 4)', 3: 'III Year (Semester 6)', 4: 'IV Year (Semester 8)' }
+  }
+
+  const handleSemTypeChange = (newSemType) => {
+    setSemType(newSemType)
+    const defaultDate = newSemType === 'odd' ? '2026-11-02' : '2026-04-20'
+    setStartDate(defaultDate)
+    setStartDates({ 1: defaultDate, 2: defaultDate, 3: defaultDate, 4: defaultDate })
   }
 
   const handleFileChange = (year, file) => {
@@ -58,31 +71,50 @@ export default function SchedulePage() {
     setSubmitting(true)
     setError('')
 
-    const hasRegularFile = Object.values(files).some(f => f !== null)
-    if (!hasRegularFile && !arrearFile) {
-      setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
-      setSubmitting(false)
-      return
+    if (inputMode === 'single') {
+      if (!masterFile) {
+        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
+        setSubmitting(false)
+        return
+      }
+    } else if (inputMode === '2file') {
+      if (!regularFile && !arrearFile) {
+        setError('Please upload at least the Regular Courses file or Arrear file.')
+        setSubmitting(false)
+        return
+      }
+    } else {
+      const hasRegularFile = Object.values(files).some(f => f !== null)
+      if (!hasRegularFile && !arrearFile) {
+        setError('Please upload at least one Regular Year Exam Map file or an Arrear Exam file.')
+        setSubmitting(false)
+        return
+      }
     }
 
     try {
       const fd = new FormData()
       fd.append('semType', semType)
-      fd.append('startDates', JSON.stringify(startDates))
       fd.append('leaveDays', JSON.stringify(holidays))
       fd.append('useGroqAI', useGroqAI)
       fd.append('humanIntervention', humanIntervention)
       fd.append('yearSessionPattern', JSON.stringify({ 1: 'FN', 2: 'FN', 3: 'FN', 4: 'FN' }))
 
-      // Append files
-      Object.keys(files).forEach(yr => {
-        if (files[yr]) {
-          fd.append(`year_${yr}`, files[yr])
-        }
-      })
-
-      if (arrearFile) {
-        fd.append('arrear_file', arrearFile)
+      if (inputMode === 'single') {
+        fd.append('regular_file', masterFile)
+        fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+      } else if (inputMode === '2file') {
+        if (regularFile) fd.append('regular_file', regularFile)
+        if (arrearFile) fd.append('arrear_file', arrearFile)
+        fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+      } else {
+        fd.append('startDates', JSON.stringify(startDates))
+        Object.keys(files).forEach(yr => {
+          if (files[yr]) {
+            fd.append(`year_${yr}`, files[yr])
+          }
+        })
+        if (arrearFile) fd.append('arrear_file', arrearFile)
       }
 
       await trigger(fd)
@@ -100,7 +132,7 @@ export default function SchedulePage() {
         <div>
           <h1>New Exam Schedule Setup</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>
-            Upload Multi-Year regular exam maps & arrear files for automated zero-conflict scheduling
+            Upload registration files for automated zero-conflict scheduling
           </p>
         </div>
       </div>
@@ -108,6 +140,34 @@ export default function SchedulePage() {
       <div className="page-body">
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {error && <div className="alert alert-error">{error}</div>}
+
+          {/* Mode Selector */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              type="button"
+              className={`btn ${inputMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setInputMode('single')}
+              style={{ fontWeight: 700 }}
+            >
+              ⚡ Single File Mode (1 File Upload)
+            </button>
+            <button
+              type="button"
+              className={`btn ${inputMode === '2file' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setInputMode('2file')}
+              style={{ fontWeight: 700 }}
+            >
+              📁 2-File Mode (Regular + Arrear)
+            </button>
+            <button
+              type="button"
+              className={`btn ${inputMode === 'split' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setInputMode('split')}
+              style={{ fontWeight: 700 }}
+            >
+              🗂️ Year-wise Split Files
+            </button>
+          </div>
 
           {/* 1. Exam Season / Semester Type */}
           <div className="card">
@@ -119,7 +179,7 @@ export default function SchedulePage() {
                   name="semType"
                   value="odd"
                   checked={semType === 'odd'}
-                  onChange={() => setSemType('odd')}
+                  onChange={() => handleSemTypeChange('odd')}
                 />
                 <span>Odd Semesters (Nov / Dec 2026 — Semesters 1, 3, 5, 7)</span>
               </label>
@@ -130,88 +190,154 @@ export default function SchedulePage() {
                   name="semType"
                   value="even"
                   checked={semType === 'even'}
-                  onChange={() => setSemType('even')}
+                  onChange={() => handleSemTypeChange('even')}
                 />
                 <span>Even Semesters (Apr / May 2026 — Semesters 2, 4, 6, 8)</span>
               </label>
             </div>
           </div>
 
-          {/* 2. Upload Regular Year Files & Set Start Dates */}
-          <div className="card">
-            <h3 style={{ marginBottom: 6 }}>2. Regular Stream Files & Exam Start Dates</h3>
-            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-              Upload Excel files for each year group and set the start date for their exams. All regular exams write in Morning (FN).
-            </p>
+          {/* 2. File Upload Cards depending on mode */}
+          {inputMode === 'single' ? (
+            <div className="card" style={{ borderLeft: '4px solid #10b981' }}>
+              <h3 style={{ marginBottom: 6, color: '#047857' }}>2. Master Registration File (1 File Mode)</h3>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+                Upload your single master registration file containing all student-course registrations (e.g. <code>Regular_All Courses.xlsx</code>).
+              </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-              {[1, 2, 3, 4].map(year => (
-                <div key={year} style={{
-                  border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#f8fafc'
-                }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 8 }}>
-                    {yearSemLabels[semType][year]}
-                  </div>
-
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                      Exam Start Date:
-                    </label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      style={{ fontSize: 12 }}
-                      value={startDates[year]}
-                      onChange={e => handleStartDateChange(year, e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                      Exam Map Excel (.xlsx):
-                    </label>
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls"
-                      className="form-control"
-                      style={{ fontSize: 12 }}
-                      onChange={e => handleFileChange(year, e.target.files[0])}
-                    />
-                    {files[year] && (
-                      <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
-                        ✓ {files[year].name}
-                      </div>
-                    )}
-                  </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, alignItems: 'center' }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    📗 Master Registration Excel File (.xlsx):
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="form-control"
+                    onChange={e => setMasterFile(e.target.files[0])}
+                  />
+                  {masterFile && (
+                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                      ✓ Master File Attached: {masterFile.name}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
 
-          {/* 3. Upload Arrear Exam File */}
-          <div className="card">
-            <h3 style={{ marginBottom: 6 }}>3. Arrear & Backlog Student Enrolments</h3>
-            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-              Upload the consolidated arrear details Excel sheet. Arrear exams will be packed into Evening (AN) sessions to conclude exams as fast as possible.
-            </p>
-
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              className="form-control"
-              style={{ maxWidth: 400 }}
-              onChange={e => setArrearFile(e.target.files[0])}
-            />
-            {arrearFile && (
-              <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
-                ✓ Arrear File Attached: {arrearFile.name}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    📅 Exam Start Date:
+                  </label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : inputMode === '2file' ? (
+            <div className="card">
+              <h3 style={{ marginBottom: 6 }}>2. Regular & Arrear Input Files</h3>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+                Upload the Regular Courses File and optional Arrear Exam Details file.
+              </p>
 
-          {/* 4. Holidays & Excluded Dates */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    📗 Regular Courses File (e.g. Regular_All Courses.xlsx):
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="form-control"
+                    onChange={e => setRegularFile(e.target.files[0])}
+                  />
+                  {regularFile && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>✓ Attached: {regularFile.name}</div>}
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    🚨 Arrear Exam File (e.g. Arrear Details_AM2026.xlsx):
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="form-control"
+                    onChange={e => setArrearFile(e.target.files[0])}
+                  />
+                  {arrearFile && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>✓ Attached: {arrearFile.name}</div>}
+                </div>
+              </div>
+
+              <div style={{ maxWidth: 300 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                  📅 Exam Start Date:
+                </label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="card">
+              <h3 style={{ marginBottom: 6 }}>2. Regular Stream Files & Exam Start Dates</h3>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+                Upload Excel files for each year group and set the start date for their exams.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+                {[1, 2, 3, 4].map(year => (
+                  <div key={year} style={{
+                    border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#f8fafc'
+                  }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 8 }}>
+                      {yearSemLabels[semType][year]}
+                    </div>
+
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                        Exam Start Date:
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        style={{ fontSize: 12 }}
+                        value={startDates[year]}
+                        onChange={e => handleStartDateChange(year, e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                        Exam Map Excel (.xlsx):
+                      </label>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="form-control"
+                        style={{ fontSize: 12 }}
+                        onChange={e => handleFileChange(year, e.target.files[0])}
+                      />
+                      {files[year] && (
+                        <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
+                          ✓ {files[year].name}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Holidays & Excluded Dates */}
           <div className="card">
-            <h3 style={{ marginBottom: 6 }}>4. Government Holidays & Excluded Dates</h3>
+            <h3 style={{ marginBottom: 6 }}>3. Government Holidays & Excluded Dates</h3>
             <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
               Dates where no exams should be scheduled (e.g. Deepavali, Sundays, National Holidays).
             </p>

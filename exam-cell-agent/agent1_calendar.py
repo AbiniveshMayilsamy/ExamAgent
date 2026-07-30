@@ -4,7 +4,7 @@ Rules: Rule 1 (max 2 sessions/day), Rule 4 (FN/AN timings), Rule 8 (leave days e
        Auto end-date extension if needed.
 """
 from datetime import date, timedelta
-from config import SESSION_TIMINGS, DEFAULT_YEAR_SESSION_PATTERN
+from config import SESSION_TIMINGS, DEFAULT_YEAR_SESSION_PATTERN, CONSECUTIVE_4SLOT_ROTATION
 
 def build_calendar(
     start_date: str,
@@ -44,12 +44,17 @@ def build_calendar(
         if date_str not in leave_set:
             exam_days += 1
             for session in ("FN", "AN"):
+                slot_idx = len(slots)
+                rot_info = CONSECUTIVE_4SLOT_ROTATION[slot_idx % 4]
                 preferred_years = [yr for yr, pref in pattern.items() if pref == session]
                 slots.append({
                     "date": date_str,
                     "session": session,
                     "time": SESSION_TIMINGS[session],
                     "preferred_years": preferred_years,
+                    "slot_index": slot_idx,
+                    "target_sem": rot_info["target_sem"],
+                    "rotation_label": rot_info["label"],
                 })
         current += timedelta(days=1)
 

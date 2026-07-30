@@ -165,7 +165,7 @@ def test_parse_reg_no_7228_rules():
 
 
 def test_staggered_semesters_utilize_day2():
-    """Verify that Sem 3 is assigned to Day 1 FN (parity 0) and Sem 5 to Day 2 FN (parity 1)."""
+    """Verify that Sem 3 is assigned to Day 1 FN, Sem 5 to Day 1 AN, Sem 7 to Day 2 FN."""
     open_slots, _ = build_calendar("2026-11-02", "2026-11-10", [])
     clusters = [
         {"course_code": "CS301", "course_name": "DS", "semesters": [3], "branches": ["CSE"], "credits": 4, "is_shared": False},
@@ -175,8 +175,8 @@ def test_staggered_semesters_utilize_day2():
     draft, _ = assign_regular_slots(clusters, open_slots)
     by_code = {c["course_code"]: (c["date"], c["session"]) for c in draft}
     assert by_code["CS301"] == ("2026-11-02", "FN")  # Day 1 FN (Sem 3)
-    assert by_code["CS501"] == ("2026-11-03", "FN")  # Day 2 FN (Sem 5)
-    assert by_code["CS701"] == ("2026-11-03", "AN")  # Day 2 AN (Sem 7)
+    assert by_code["CS501"] == ("2026-11-02", "AN")  # Day 1 AN (Sem 5)
+    assert by_code["CS701"] == ("2026-11-03", "FN")  # Day 2 FN (Sem 7)
 
 
 def test_dense_schedule_no_empty_gaps():

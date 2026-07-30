@@ -19,6 +19,7 @@ def run_pipeline(
     source=None,
     year_files: dict = None,
     arrear_file: str = None,
+    regular_file: str = None,
     sem_type: str = "odd",
     start_date: str = "2026-11-02",
     end_date: str = None,
@@ -32,7 +33,7 @@ def run_pipeline(
 ) -> dict:
     """
     Central Hub pipeline.
-    Supports either legacy single source or new year_files + arrear_file.
+    Supports either direct 2-file loading (regular_file + arrear_file) or multi-year files.
     """
     audit_log = []
     agent_stats = {}
@@ -47,8 +48,8 @@ def run_pipeline(
         return output
 
     # ── 1. Load & Harmonize Data ──────────────────────────────────────────────
-    if year_files:
-        enrolments = load_multi_year_dataset(year_files, arrear_file, sem_type)
+    if regular_file or year_files:
+        enrolments = load_multi_year_dataset(year_files=year_files, arrear_file=arrear_file, sem_type=sem_type, regular_file=regular_file)
     elif source:
         enrolments = load_students(source)
     else:

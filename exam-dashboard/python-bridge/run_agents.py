@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--year-2", default=None)
     parser.add_argument("--year-3", default=None)
     parser.add_argument("--year-4", default=None)
+    parser.add_argument("--regular-file", default=None)
     parser.add_argument("--arrear-file", default=None)
     parser.add_argument("--start-dates", default="{}")
     parser.add_argument("--leaves", default="[]")
@@ -51,6 +52,7 @@ def main():
     
     args = parser.parse_args()
 
+    regular_file = args.regular_file or args.file
     year_files = {
         "1": args.year_1 or (args.file if "1" in str(args.file) else None),
         "2": args.year_2 or (args.file if "2" in str(args.file) else None),
@@ -59,8 +61,8 @@ def main():
     }
 
     # Default fallback if single file uploaded
-    if not any(year_files.values()) and args.file:
-        year_files["2"] = args.file
+    if not regular_file and not any(year_files.values()) and args.file:
+        regular_file = args.file
 
     try:
         start_dates = json.loads(args.start_dates)
@@ -80,7 +82,7 @@ def main():
     agent_stats = {}
 
     # 1. Ingest Datasets
-    enrolments = load_multi_year_dataset(year_files, arrear_file=args.arrear_file, sem_type=args.sem_type)
+    enrolments = load_multi_year_dataset(year_files=year_files, arrear_file=args.arrear_file, sem_type=args.sem_type, regular_file=regular_file)
     dept_roll_ranges = build_dept_roll_ranges(enrolments)
 
     # Agent 1: Calendar Builder

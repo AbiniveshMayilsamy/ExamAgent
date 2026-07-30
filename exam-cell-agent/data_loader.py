@@ -304,7 +304,11 @@ def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool
 
                     primary_id = reg_no if reg_no else roll_no
                     if primary_id and course_code:
-                        actual_sem = extract_sem_from_course_code(course_code, row_sem) if is_arrear else row_sem
+                        if is_arrear:
+                            actual_sem = extract_sem_from_course_code(course_code, row_sem)
+                        else:
+                            reg_info = _parse_reg_no_info(primary_id)
+                            actual_sem = reg_info["regular_sem"] if reg_info and reg_info.get("regular_sem") else row_sem
                         records.append({
                             "name": name or f"Student {primary_id}",
                             "reg_no": primary_id,
@@ -360,9 +364,9 @@ def load_students(source, file_type: str = "auto") -> list:
     return []
 
 
-def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type: str = "odd") -> list:
+def load_multi_year_dataset(year_files: dict = None, arrear_file: str = None, sem_type: str = "odd", regular_file: str = None) -> list:
     """
-    Ingests files across active years (1-4) and optional arrear file.
+    Ingests regular dataset (either 4 year_files or single regular_file) and optional arrear file.
     Only harmonizes arrears belonging to active enrolled students and enforces LE rules.
     """
     sem_mapping = {
@@ -373,15 +377,10 @@ def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type:
     
     all_enrolments = []
     student_master_db = {}  # primary_id -> {name, branch, year, semester, roll_no}
-    
-    # 1. Ingest Regular Year Files
-    for y_str, fpath in year_files.items():
-        if not fpath:
-            continue
-        y_num = int(y_str)
-        target_sem = active_sem_map.get(y_num, y_num * 2 - 1)
-        
-        parsed = parse_xlsx_with_zipfile(fpath, default_sem=target_sem, is_arrear=False)
+
+    # 1. Ingest Direct Regular File if passed
+    if regular_file:
+        parsed = parse_xlsx_with_zipfile(regular_file, default_sem=1, is_arrear=False)
         for rec in parsed:
             p_id = rec["reg_no"]
             if p_id not in student_master_db and not rec["name"].startswith("Student "):
@@ -394,7 +393,28 @@ def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type:
                 }
             all_enrolments.append(rec)
             
-    # 2. Ingest & Harmonize Arrear File if present
+    # 2. Ingest Regular Year Files if year_files provided
+    elif year_files:
+        for y_str, fpath in year_files.items():
+            if not fpath:
+                continue
+            y_num = int(y_str) if y_str.isdigit() else 1
+            target_sem = active_sem_map.get(y_num, y_num * 2 - 1)
+            
+            parsed = parse_xlsx_with_zipfile(fpath, default_sem=target_sem, is_arrear=False)
+            for rec in parsed:
+                p_id = rec["reg_no"]
+                if p_id not in student_master_db and not rec["name"].startswith("Student "):
+                    student_master_db[p_id] = {
+                        "name": rec["name"],
+                        "branch": rec["branch"],
+                        "year": rec["year"],
+                        "semester": rec["semester"],
+                        "roll_no": rec["roll_no"]
+                    }
+                all_enrolments.append(rec)
+            
+    # 3. Ingest & Harmonize Arrear File if present
     if arrear_file:
         arrear_records = parse_xlsx_with_zipfile(arrear_file, default_sem=1, is_arrear=True)
         seen_arrears = set()  # (reg_no, course_code) deduplication
@@ -404,11 +424,11 @@ def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type:
             c_code = arr["course_code"]
             arr_sem = arr.get("semester", 1)
             
-            # RULE 1: Only schedule arrears for active enrolled students in uploaded year files
-            if p_id not in student_master_db:
+            # RULE 1: Only schedule arrears for active enrolled students in uploaded regular files
+            if student_master_db and p_id not in student_master_db:
                 continue
 
-            m_info = student_master_db[p_id]
+            m_info = student_master_db.get(p_id, {"name": arr["name"], "branch": arr["branch"], "year": arr["year"], "roll_no": arr["roll_no"]})
             r_no = m_info.get("roll_no", arr.get("roll_no"))
 
             # RULE 2: Lateral Entry students joined in Sem 3 -> MUST NOT receive Sem 1 or Sem 2 arrears
@@ -421,7 +441,7 @@ def load_multi_year_dataset(year_files: dict, arrear_file: str = None, sem_type:
             
             arr["name"] = m_info["name"]
             arr["branch"] = m_info["branch"]
-            arr["current_year"] = m_info["year"]
+            arr["current_year"] = m_info.get("year", 1)
             arr["roll_no"] = r_no
                 
             all_enrolments.append(arr)

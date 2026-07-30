@@ -18,6 +18,14 @@ DEFAULT_YEAR_SESSION_PATTERN = {
     4: "AN",   # 4th year → evening
 }
 
+# Consecutive 4-slot alternating session pattern (Day 1 FN: Sem 3, Day 1 AN: Sem 5, Day 2 FN: Sem 7, Day 2 AN: Arrears)
+CONSECUTIVE_4SLOT_ROTATION = [
+    {"session": "FN", "target_sem": 3, "label": "3rd Sem Regular (Morning)"},
+    {"session": "AN", "target_sem": 5, "label": "5th Sem Regular (Afternoon)"},
+    {"session": "FN", "target_sem": 7, "label": "7th Sem Regular (Morning)"},
+    {"session": "AN", "target_sem": "arrear", "label": "Arrear & Backlog Exams (Afternoon)"},
+]
+
 # Rule 3 — Schedule window defaults
 SCHEDULE_WINDOWS = {
     "odd":  {"month_start": 11, "month_end": 12},   # Nov–Dec

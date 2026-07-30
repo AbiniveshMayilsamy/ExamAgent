@@ -82,6 +82,8 @@ async function triggerPipeline(req, res) {
     '--leaves', JSON.stringify(leaveDays),
   ]
 
+  if (uploadedFilesMap.regular_file) pyArgs.push('--regular-file', uploadedFilesMap.regular_file)
+  if (uploadedFilesMap.regular) pyArgs.push('--regular-file', uploadedFilesMap.regular)
   if (uploadedFilesMap.year_1) pyArgs.push('--year-1', uploadedFilesMap.year_1)
   if (uploadedFilesMap.year_2) pyArgs.push('--year-2', uploadedFilesMap.year_2)
   if (uploadedFilesMap.year_3) pyArgs.push('--year-3', uploadedFilesMap.year_3)

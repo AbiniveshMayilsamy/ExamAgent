@@ -1,6 +1,6 @@
 # Agentverse - Multi-Agent AI Exam Scheduling System 🎓
 
-An automated, rule-compliant, multi-agent AI exam timetable generation system for college exam cells. Built using a 7-Agent modular architecture, deterministic rule solver engines, Groq AI LLM auditing, and an interactive real-time web dashboard.
+An automated, rule-compliant, multi-agent AI exam timetable generation system for college exam cells. Built using a 7-Agent modular architecture, deterministic rule solver engines, Ollama Local LLM & Groq AI auditing, and an interactive real-time web dashboard.
 
 ---
 
@@ -84,7 +84,7 @@ The engine implements a **Year-Alternating FN/AN Schedule** that ensures every s
 
 ## 🚀 Features
 
-- **Multi-Agent Orchestration**: 7 cooperating modules working via deterministic constraint engines and Groq AI LLM auditing.
+- **Multi-Agent Orchestration**: 7 cooperating modules working via deterministic constraint engines and AI LLM auditing (**Ollama local `llama3` / `llama3.1`** & **Groq API**).
 - **100% Collision-Free Guarantee**: Agent 2 & Agent 7 mathematically verify 0 double-bookings across all student registration numbers.
 - **Universal Course Ingestion**: Pure-python zero-dependency Excel parser (`data_loader.py`) supporting 12-digit Anna University / Eshwar register numbers (`REG_DEPT_MAP`), Lateral Entry (LE) filtering, and dynamic Open Elective (`U23O...`) semester extraction.
 - **Real-Time Web Dashboard**: Built with React, Node.js/Express CLI bridge, WebSocket progress streaming, interactive grid view, hall ticket modal, and Excel/CSV download.
@@ -108,7 +108,7 @@ Agentverse - V2/
 │   ├── agent6_arrear.py           # Arrear & Backlog Scheduler
 │   ├── agent7_resolver.py         # Cumulative Conflict Resolver
 │   ├── data_loader.py             # Multi-year Excel/CSV ingestion engine
-│   ├── groq_service.py            # Groq AI difficulty tagging & AI summary
+│   ├── groq_service.py            # Ollama (Local) & Groq AI difficulty tagging & AI summary
 │   ├── config.py                  # Shared rules & session patterns
 │   └── tests/                     # Automated pytest suite
 │       └── test_agents.py

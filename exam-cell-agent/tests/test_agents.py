@@ -163,3 +163,53 @@ def test_parse_reg_no_7228_rules():
     assert info_23["batch"] == "23"
     assert info_23["regular_sem"] == 7
 
+
+def test_staggered_semesters_utilize_day2():
+    """Verify that Sem 3 is assigned to Day 1 FN (parity 0) and Sem 5 to Day 2 FN (parity 1)."""
+    open_slots, _ = build_calendar("2026-11-02", "2026-11-10", [])
+    clusters = [
+        {"course_code": "CS301", "course_name": "DS", "semesters": [3], "branches": ["CSE"], "credits": 4, "is_shared": False},
+        {"course_code": "CS501", "course_name": "Algo", "semesters": [5], "branches": ["CSE"], "credits": 4, "is_shared": False},
+        {"course_code": "CS701", "course_name": "Cloud", "semesters": [7], "branches": ["CSE"], "credits": 4, "is_shared": False},
+    ]
+    draft, _ = assign_regular_slots(clusters, open_slots)
+    by_code = {c["course_code"]: (c["date"], c["session"]) for c in draft}
+    assert by_code["CS301"] == ("2026-11-02", "FN")  # Day 1 FN (Sem 3)
+    assert by_code["CS501"] == ("2026-11-03", "FN")  # Day 2 FN (Sem 5)
+    assert by_code["CS701"] == ("2026-11-03", "AN")  # Day 2 AN (Sem 7)
+
+
+def test_dense_schedule_no_empty_gaps():
+    """Verify that regular exams start on Day 1 (parity 0 = II year FN).
+    sample_data has only Sem 1/2/3 (Year 1 & 2), so only odd-parity days are used.
+    Day 2 (parity 1) is reserved for III/IV year — correctly empty for this dataset.
+    """
+    from hub import run_pipeline
+    import os
+    sample_path = os.path.join(os.path.dirname(__file__), "..", "sample_data", "students.json")
+    result = run_pipeline(
+        source=sample_path,
+        start_date="2026-11-02",
+        end_date="2026-11-30",
+        leave_days=[],
+    )
+    assert result["status"] == "PASS"
+    reg_schedule = [e for e in result["schedule"] if not e.get("is_arrear")]
+    reg_dates = sorted(set(e["date"] for e in reg_schedule))
+    # Day 1 must be utilized (II year FN, parity 0)
+    assert "2026-11-02" in reg_dates
+    # All II/I year exams must land on odd-index days (parity 0: Nov 2, 4, 6...)
+    from datetime import date as dt
+    base = dt.fromisoformat("2026-11-02")
+    all_dates_list = sorted(set(
+        s["date"] for s in result["schedule"]
+        if not s.get("is_arrear") and s.get("year", 1) in (1, 2)
+    ))
+    for d in all_dates_list:
+        idx = (dt.fromisoformat(d) - base).days
+        assert idx % 2 == 0, f"{d} is not an odd-parity day for II/I year"
+
+
+def from_iso(d_str):
+    from datetime import date
+    return date.fromisoformat(d_str)

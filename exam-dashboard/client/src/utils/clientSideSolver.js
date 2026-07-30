@@ -112,35 +112,95 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
 
   const regularClusters = clusters.filter(c => !c.is_arrear);
   const draftSchedule = [];
-  let slotIdx = 0;
+  const usedBranchSession = new Set();
+  const semLastDate = {};
 
-  // Sort clusters by semester, then by size
-  regularClusters.sort((a, b) => a.semester - b.semester || b.studentCount - a.studentCount);
+  const allDates = [...new Set(openSlots.map(s => s.date))].sort();
+
+  // Sort clusters: shared first, then semester asc, then student count desc
+  regularClusters.sort((a, b) => (b.is_shared ? 1 : 0) - (a.is_shared ? 1 : 0) || a.semester - b.semester || b.studentCount - a.studentCount);
+
+  const dateIndexMap = {};
+  allDates.forEach((d, idx) => { dateIndexMap[d] = idx; });
+  const branchLastDate = {};
 
   regularClusters.forEach(cluster => {
-    if (slotIdx < openSlots.length) {
-      draftSchedule.push({
-        ...cluster,
-        date: openSlots[slotIdx].date,
-        session: openSlots[slotIdx].session
-      });
-      slotIdx += 2; // Jump by 2 to leave space for Agent 5 gaps
-    } else {
-      // Fallback slot
-      const fallback = openSlots[slotIdx % openSlots.length];
-      draftSchedule.push({
-        ...cluster,
-        date: fallback.date,
-        session: fallback.session
-      });
-      slotIdx++;
+    const sem = cluster.semester || 1;
+    const year = Math.ceil(sem / 2);
+    
+    let preferredParity = 0;
+    let preferredSession = 'FN';
+    if (year === 2) {
+      preferredParity = 0;
+      preferredSession = 'FN';
+    } else if (year === 1 || year === 3) {
+      preferredParity = 1;
+      preferredSession = 'FN';
+    } else { // year 4 (Sem 7)
+      preferredParity = 1;
+      preferredSession = 'AN';
     }
+
+    let assignedSlot = null;
+
+    for (let pass = 1; pass <= 3; pass++) {
+      for (let i = 0; i < openSlots.length; i++) {
+        const slot = openSlots[i];
+        const dateStr = slot.date;
+        const session = slot.session;
+        const dIdx = dateIndexMap[dateStr] || 0;
+
+        if ((pass === 1 || pass === 2) && (dIdx % 2) !== preferredParity) continue;
+        if (pass === 1 && session !== preferredSession) continue;
+
+        // Enforce min 2-day gap per branch for this semester
+        let branchGapClash = false;
+        if (pass === 1 || pass === 2) {
+          for (const b of cluster.branches) {
+            if (branchLastDate[`${b}_${sem}`]) {
+              const prevD = new Date(branchLastDate[`${b}_${sem}`]);
+              const currD = new Date(dateStr);
+              const diffDays = Math.round((currD - prevD) / (1000 * 3600 * 24));
+              if (diffDays < 2) {
+                branchGapClash = true;
+                break;
+              }
+            }
+          }
+        }
+        if (branchGapClash) continue;
+
+        // Check if any branch in cluster already has an exam at (branch, date, session)
+        const branchClash = cluster.branches.some(b => usedBranchSession.has(`${b}_${dateStr}_${session}`));
+        if (branchClash) continue;
+
+        assignedSlot = slot;
+        break;
+      }
+      if (assignedSlot) break;
+    }
+
+    if (!assignedSlot) {
+      assignedSlot = openSlots.find(s => !cluster.branches.some(b => usedBranchSession.has(`${b}_${s.date}_${s.session}`))) || openSlots[0];
+    }
+
+    cluster.branches.forEach(b => {
+      usedBranchSession.add(`${b}_${assignedSlot.date}_${assignedSlot.session}`);
+      branchLastDate[`${b}_${sem}`] = assignedSlot.date;
+    });
+    semLastDate[sem] = assignedSlot.date;
+
+    draftSchedule.push({
+      ...cluster,
+      date: assignedSlot.date,
+      session: assignedSlot.session
+    });
   });
 
   onAgentLog(4, `Harmonized ${draftSchedule.length} regular courses into synchronized branch sessions.`);
   await sleep(400);
   onAgentDone(4, `Assigned primary slots for ${draftSchedule.length} regular courses.`,
-    `Agent 4 synchronized regular semester subjects across all engineering departments (Rule 4), scheduling batch-wide exams in unified Forenoon sessions.`
+    `Agent 4 synchronized regular semester subjects across all engineering departments (Rule 4), scheduling batch-wide exams in unified Forenoon/Afternoon sessions.`
   );
 
   // ----------------------------------------------------
@@ -149,7 +209,7 @@ export async function runClientSidePipeline(params, onAgentStart, onAgentLog, on
   onAgentStart(5, 'Gap & Difficulty Enforcer', 'Rules 6, 9');
   onAgentLog(5, `Evaluating course difficulty & inserting mandatory study gaps...`);
 
-  // Enforce 1-day or 2-day gap for hard subjects
+  // Enforce 1-day or 2-day gap for hard subjects per semester
   const spacedSchedule = [];
   const semBranchLastDate = {};
 

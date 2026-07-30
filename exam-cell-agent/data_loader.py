@@ -42,11 +42,17 @@ REG_DEPT_MAP = {
 ROLL_NO_PATTERN = re.compile(r'^(26|25|24|23|22|21|20|19)(AD|CS|CC|EC|EE|ME|IT|CB|SY|AM|VL|CY)[A-Z0-9]{2,6}$', re.IGNORECASE)
 
 def normalize_dept(dept_str: str) -> str:
-    """Normalize department strings using exact token matching (prevents substring matching bugs)."""
+    """Normalize department strings — handles compound sheet names like 'III ECE', 'IV MECH A', '3rd Year CSE'."""
     if not dept_str:
         return "UNKNOWN"
     clean = str(dept_str).strip().upper().replace("&", "")
-    
+
+    # Strip year/section prefixes and suffixes (e.g. 'III ', 'IV ', '3RD ', 'A', 'B', 'C')
+    # so 'III ECE', 'IV MECH A', '3RD YEAR CSE B' all reduce to their dept token
+    clean = re.sub(r'^(I{1,3}V?|IV|VI{0,3}|\d+(ST|ND|RD|TH)\s*(YEAR)?)\s*', '', clean)
+    clean = re.sub(r'\s+[A-D]$', '', clean)   # trailing section letter
+    clean = clean.strip()
+
     if clean in ["AIDS", "AIDS A", "AIDS B", "AI&DS", "ARTIFICIAL INTELLIGENCE AND DATA SCIENCE", "ARTIFICIAL INTELLIGENCE AND DATA"]:
         return "AIDS"
     if clean in ["AIML", "AIML A", "AIML B", "AI-ML", "MACHINE LEARNING"]:
@@ -67,23 +73,41 @@ def normalize_dept(dept_str: str) -> str:
         return "MECH"
     if clean in ["IT", "INFORMATION TECHNOLOGY"]:
         return "IT"
-        
+
+    # Last resort: scan tokens for a known dept keyword
+    for token in clean.split():
+        token = token.strip()
+        if token in KNOWN_DEPTS:
+            return token
+        if token in ["CYS", "CYSE", "CYBER"]:
+            return "CYSE"
+
     return clean
 
 
 def is_valid_course_code(item: str) -> bool:
-    """Check if item is a legitimate course code and NOT a student roll number or S.No."""
-    if not item or len(item) < 6 or len(item) > 10:
+    """Check if item is a legitimate course code and NOT a student roll number, reg number, or table header."""
+    if not item:
         return False
-    item_upper = item.upper()
+    item_clean = str(item).strip()
+    if len(item_clean) < 4 or len(item_clean) > 12:
+        return False
+    item_upper = item_clean.upper()
+
+    # Reject known headers and non-course keywords
+    if item_upper in ['S.NO', 'SNO', 'SL.NO', 'ROLL NO', 'ROLLNO', 'REGISTER NUMBER', 'REGISTER NO', 'REG NO', 'REGNO', 'STUDENT NAME', 'NAME', 'COURSECODE', 'COURSE CODE', 'COURSE', 'DEPT', 'DEPARTMENT', 'SEMESTER', 'SEM', 'GRADE', 'RESULT', 'REMARKS', 'PASS', 'FAIL']:
+        return False
+
+    # Reject student roll numbers (e.g. 25CS001) and register numbers (12 digits)
     if ROLL_NO_PATTERN.match(item_upper) or item_upper.startswith('IC'):
         return False
-    if item.isdigit():
+    if item_clean.isdigit():
         return False
-    if item_upper.startswith('U1') or item_upper.startswith('U2') or item_upper.startswith('U3'):
+
+    # Must contain at least one letter AND at least one digit (e.g. MA3151, GE3151, U23CS405, CS301, OEC84, 19CS301)
+    if re.search(r'[A-Z]', item_upper) and re.search(r'\d', item_upper):
         return True
-    if re.match(r'^(19|20|21|22|23|24|25)[A-Z]{2,4}\d{3}', item_upper):
-        return True
+
     return False
 
 
@@ -110,25 +134,18 @@ def is_lateral_entry_student(roll_no: str, reg_no: str) -> bool:
 
 def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int:
     """
-    Extract exact semester from course code for Sri Eshwar / Anna University Regulations 2023.
-    - U23MA209, U23MA210, U23MA282 -> Sem 4 (Mathematics IV)
-    - Open Electives (U23O... e.g. U23OME06, U23OAD81) -> Sem 4
-    - U23...3xx (U23EC384, U23CS383) -> Sem 3
-    - U23...4xx (U23CS405, U23CS494, U23AD491) -> Sem 4
-    - U23...5xx (U23CS591, U23CB593) -> Sem 5
-    - U23MA201..206, U23PH201, U23CY281 -> Sem 1 or 2
+    Extract semester from course code for Sri Eshwar / Anna University Regulations 2023.
+    Preserves fallback_sem for Open Electives and non-standard subject codes.
     """
     if not course_code:
-        return fallback_sem
+        return fallback_sem if fallback_sem else 1
     code = str(course_code).upper().strip()
-    
+
     # 1. Specific Known Course Overrides
     if code in ["U23MA209", "U23MA210", "U23MA282"]:
         return 4
-    if code.startswith("U23O") or code.startswith("19O") or code.startswith("20O"):
-        return 4  # Open Electives offered in 4th Sem
-        
-    # 2. Match 3-digit subject number after dept code
+
+    # 2. Match 3-digit subject number (e.g. U23CS591 -> 5, U23EC384 -> 3, U23CB593 -> 5)
     match = re.search(r'[A-Z]{2,4}(\d{3})', code)
     if match:
         digit3 = match.group(1)
@@ -138,14 +155,28 @@ def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int
                 return 2
             return sem_digit
 
-    # 3. Fallback pattern match
+    # 3. Open Elective pattern check (e.g., U23OME81, U23OCS85, U23OEC84)
+    if code.startswith("U23O") or code.startswith("19O") or code.startswith("20O"):
+        match_oe = re.search(r'\d{2,3}', code)
+        if match_oe:
+            num_str = match_oe.group(0)
+            if len(num_str) == 3 and num_str[0] in '12345678':
+                return int(num_str[0])
+            elif len(num_str) == 2:
+                if num_str[0] in '5678':
+                    return 5
+                elif num_str[0] in '34':
+                    return 3
+        return fallback_sem if fallback_sem else 5
+
+    # 4. Fallback pattern match
     match2 = re.search(r'^[U\d]{0,3}[A-Z]{2,4}(\d)', code)
     if match2:
         sem_digit = int(match2.group(1))
         if 1 <= sem_digit <= 8:
             return sem_digit
 
-    return fallback_sem
+    return fallback_sem if fallback_sem else 1
 
 
 def _parse_reg_no_info(reg_no: str) -> dict:

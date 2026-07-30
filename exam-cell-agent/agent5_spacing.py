@@ -28,12 +28,19 @@ def apply_spacing_rules(
         entry["difficulty"] = diff
 
     def get_groups(sched):
+        """
+        Group by (year,) only — gap is per-year, not per-branch.
+        II year gap day does NOT block III/IV year from writing that day.
+        """
         groups = defaultdict(list)
+        seen = set()
         for entry in sched:
             if not entry.get("is_arrear", False):
                 yr = entry.get("year") or sem_to_year(entry.get("semester", 1))
-                for branch in entry["branches"]:
-                    groups[(branch, yr)].append(entry)
+                key = (yr, entry["course_code"])
+                if key not in seen:
+                    seen.add(key)
+                    groups[yr].append(entry)
         return groups
 
     def build_branch_session_used(sched):
@@ -44,14 +51,23 @@ def apply_spacing_rules(
                     bsu.add((br, entry["date"], entry["session"]))
         return bsu
 
-    def find_free_date(from_date: date, min_gap: int, branches: list, session: str, sched: list) -> str:
+    def find_free_date(from_date: date, min_gap: int, branches: list, session: str, sched: list, year: int = 0, base_date: date = None) -> str:
         bsu = build_branch_session_used(sched)
         candidate = from_date + timedelta(days=min_gap)
+        # Snap to correct parity for the year (II/I year = even index, III/IV year = odd index)
+        if base_date and year in (1, 2, 3, 4):
+            required_parity = 0 if year in (1, 2) else 1
+            idx = (candidate - base_date).days
+            if idx % 2 != required_parity:
+                candidate += timedelta(days=1)
         while any((br, candidate.isoformat(), session) in bsu for br in branches):
-            candidate += timedelta(days=1)
+            candidate += timedelta(days=2)  # step by 2 to stay on same parity
         return candidate.isoformat()
 
     exams_moved = 0
+    # Compute base_date once from the earliest exam in the schedule
+    all_reg_dates = [date.fromisoformat(e["date"]) for e in draft_schedule if not e.get("is_arrear")]
+    base_date = min(all_reg_dates) if all_reg_dates else date.fromisoformat("2026-11-02")
 
     # 1. Enforce minimum required gaps
     changed = True
@@ -61,7 +77,7 @@ def apply_spacing_rules(
         iterations += 1
         groups = get_groups(schedule)
 
-        for (branch, year), exams in groups.items():
+        for year, exams in groups.items():
             exams_sorted = sorted(exams, key=lambda e: e["date"])
 
             for i in range(len(exams_sorted) - 1):
@@ -81,7 +97,7 @@ def apply_spacing_rules(
                         if entry["course_code"] == b_code and not entry.get("is_arrear"):
                             entry["_skip"] = True
                     temp_sched = [e for e in schedule if not e.get("_skip")]
-                    new_date = find_free_date(date_a, required, b_branches, b_session, temp_sched)
+                    new_date = find_free_date(date_a, required, b_branches, b_session, temp_sched, year, base_date)
                     for entry in schedule:
                         entry.pop("_skip", None)
                         if entry["course_code"] == b_code and not entry.get("is_arrear"):
@@ -90,10 +106,11 @@ def apply_spacing_rules(
                     changed = True
                     break
 
-    # 2. Pull courses forward into any natural gaps larger than required gap
+    # 2. Pull courses forward into any natural gaps larger than required gap (parity-safe)
     groups = get_groups(schedule)
     courses_pulled = 0
-    for (branch, year), exams in groups.items():
+    for year, exams in groups.items():
+        required_parity = 0 if year in (1, 2) else 1
         exams_sorted = sorted(exams, key=lambda e: e["date"])
         for i in range(len(exams_sorted) - 1):
             a = exams_sorted[i]
@@ -104,9 +121,13 @@ def apply_spacing_rules(
             required = GAP_HARD_COURSE if b["difficulty"] == "hard" else GAP_REGULAR_MIN
 
             if gap > required:
-                ideal_date = (date_a + timedelta(days=required)).isoformat()
+                ideal = date_a + timedelta(days=required)
+                # Snap to correct parity
+                if (ideal - base_date).days % 2 != required_parity:
+                    ideal += timedelta(days=1)
+                ideal_date = ideal.isoformat()
                 bsu = build_branch_session_used(schedule)
-                if not any((br, ideal_date, b["session"]) in bsu for br in b["branches"]):
+                if ideal_date < b["date"] and not any((br, ideal_date, b["session"]) in bsu for br in b["branches"]):
                     for entry in schedule:
                         if entry["course_code"] == b["course_code"] and not entry.get("is_arrear"):
                             entry["date"] = ideal_date

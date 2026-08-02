@@ -2,6 +2,7 @@ services:
   - type: web
     name: exam-dashboard-backend
     env: node
+    plan: free
     rootDir: exam-dashboard/server
     buildCommand: npm install
     startCommand: npm start

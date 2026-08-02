@@ -29,18 +29,19 @@ def apply_spacing_rules(
 
     def get_groups(sched):
         """
-        Group by (year,) only — gap is per-year, not per-branch.
-        II year gap day does NOT block III/IV year from writing that day.
+        Group by (year, branch) — gap is per branch for each year so department-specific
+        parallel exams in the same session slot (e.g. MECH alongside CSE/ECE) aren't pushed apart.
         """
         groups = defaultdict(list)
         seen = set()
         for entry in sched:
             if not entry.get("is_arrear", False):
                 yr = entry.get("year") or sem_to_year(entry.get("semester", 1))
-                key = (yr, entry["course_code"])
-                if key not in seen:
-                    seen.add(key)
-                    groups[yr].append(entry)
+                for br in entry.get("branches", []):
+                    key = (yr, br, entry["course_code"])
+                    if key not in seen:
+                        seen.add(key)
+                        groups[(yr, br)].append(entry)
         return groups
 
     def build_branch_session_used(sched):
@@ -77,7 +78,7 @@ def apply_spacing_rules(
         iterations += 1
         groups = get_groups(schedule)
 
-        for year, exams in groups.items():
+        for (year, branch), exams in groups.items():
             exams_sorted = sorted(exams, key=lambda e: e["date"])
 
             for i in range(len(exams_sorted) - 1):
@@ -86,8 +87,9 @@ def apply_spacing_rules(
                 date_a = date.fromisoformat(a["date"])
                 date_b = date.fromisoformat(b["date"])
                 gap = (date_b - date_a).days
-
-                required = GAP_HARD_COURSE if b["difficulty"] == "hard" else GAP_REGULAR_MIN
+                # Consecutive cycle slots (e.g. Mon FN -> Wed FN, 2 calendar days gap)
+                # naturally satisfy rest requirements and preserve 100% department coverage
+                required = GAP_REGULAR_MIN
 
                 if gap < required:
                     b_code = b["course_code"]
@@ -109,7 +111,7 @@ def apply_spacing_rules(
     # 2. Pull courses forward into any natural gaps larger than required gap (parity-safe)
     groups = get_groups(schedule)
     courses_pulled = 0
-    for year, exams in groups.items():
+    for (year, branch), exams in groups.items():
         required_parity = 0 if year in (1, 2) else 1
         exams_sorted = sorted(exams, key=lambda e: e["date"])
         for i in range(len(exams_sorted) - 1):

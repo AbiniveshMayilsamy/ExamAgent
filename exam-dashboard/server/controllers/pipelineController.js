@@ -38,7 +38,7 @@ function getStore() {
 }
 
 async function triggerPipeline(req, res) {
-  const store = getStore()
+  const patternType = req.body.patternType || 'alternating'
   const semType = req.body.semType || 'odd'
   const startDates = req.body.startDates || '{}'
   const leaveDays = JSON.parse(req.body.leaveDays || '[]')
@@ -64,6 +64,7 @@ async function triggerPipeline(req, res) {
     endDate: 'Auto-calculated',
     leaveDays,
     semType,
+    patternType,
     useGroqAI,
     humanIntervention,
     agents: initAgents(),
@@ -78,6 +79,7 @@ async function triggerPipeline(req, res) {
   const pyArgs = [
     bridgePath,
     '--sem-type', semType,
+    '--pattern-type', patternType,
     '--start-dates', typeof startDates === 'string' ? startDates : JSON.stringify(startDates),
     '--leaves', JSON.stringify(leaveDays),
   ]

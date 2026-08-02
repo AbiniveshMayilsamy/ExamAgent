@@ -4,6 +4,8 @@ export default function TriggerForm({ onTrigger, disabled }) {
   const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
   
+  const [patternType, setPatternType] = useState('alternating') // 'alternating' | 'semester_wise'
+  
   // Input Files & Start Dates (Odd sem -> 2026-11-02 Nov/Dec, Even sem -> 2026-04-20 Apr/May)
   const [masterFile, setMasterFile] = useState(null)
   const [regularFile, setRegularFile] = useState(null)
@@ -60,6 +62,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
     const fd = new FormData()
     
     fd.append('semType', semType)
+    fd.append('patternType', patternType)
     fd.append('leaveDays', JSON.stringify(leaves))
     fd.append('useGroqAI', useGroqAI)
     fd.append('humanIntervention', humanIntervention)
@@ -136,6 +139,48 @@ export default function TriggerForm({ onTrigger, disabled }) {
         >
           🗂️ Split Year Files
         </button>
+      </div>
+
+      {/* Schedule Pattern Toggle Switch */}
+      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #3b82f6' }}>
+        <label style={{ ...lbl, color: '#60a5fa', fontWeight: 700, fontSize: 13 }}>🔀 Schedule Pattern Type</label>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setPatternType('alternating')}
+            style={{
+              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
+              border: patternType === 'alternating' ? '2px solid #3b82f6' : '1px solid #334155',
+              background: patternType === 'alternating' ? '#1e293b' : '#090d16',
+              color: patternType === 'alternating' ? '#f8fafc' : '#94a3b8', cursor: 'pointer'
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 13, color: patternType === 'alternating' ? '#60a5fa' : '#cbd5e1' }}>
+              🔄 Alternating Cycle Pattern
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
+              Day 1 FN (Sem 3), Day 1 AN (Sem 5), Day 2 FN (Sem 7), Day 2 AN (Arrear Sweep)
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPatternType('semester_wise')}
+            style={{
+              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
+              border: patternType === 'semester_wise' ? '2px solid #8b5cf6' : '1px solid #334155',
+              background: patternType === 'semester_wise' ? '#2e1065' : '#090d16',
+              color: patternType === 'semester_wise' ? '#f8fafc' : '#94a3b8', cursor: 'pointer'
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 13, color: patternType === 'semester_wise' ? '#c084fc' : '#cbd5e1' }}>
+              📅 Semester-Dedicated Daily Pattern
+            </div>
+            <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 3 }}>
+              Day 1: Sem 3 FN + Arrear AN | Day 2: Sem 5 FN + Arrear AN | Day 3: Sem 7 FN + Arrear AN
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Semester Type Selector */}

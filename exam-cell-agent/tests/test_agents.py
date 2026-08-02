@@ -172,7 +172,8 @@ def test_staggered_semesters_utilize_day2():
         {"course_code": "CS501", "course_name": "Algo", "semesters": [5], "branches": ["CSE"], "credits": 4, "is_shared": False},
         {"course_code": "CS701", "course_name": "Cloud", "semesters": [7], "branches": ["CSE"], "credits": 4, "is_shared": False},
     ]
-    draft, _ = assign_regular_slots(clusters, open_slots)
+    res = assign_regular_slots(open_slots, clusters)
+    draft = res["draft_schedule"]
     by_code = {c["course_code"]: (c["date"], c["session"]) for c in draft}
     assert by_code["CS301"] == ("2026-11-02", "FN")  # Day 1 FN (Sem 3)
     assert by_code["CS501"] == ("2026-11-02", "AN")  # Day 1 AN (Sem 5)
@@ -210,6 +211,35 @@ def test_dense_schedule_no_empty_gaps():
         assert idx % 2 == 0, f"{d} is not an odd-parity day for II/I year"
 
 
+def test_semester_wise_pattern():
+    """Verify that pattern_type='semester_wise' assigns Day 1 to Sem 3 FN+AN, Day 2 to Sem 5 FN+AN, Day 3 to Sem 7 FN+AN."""
+    slots, _ = build_calendar("2026-11-02", "2026-11-04", leave_days=[], pattern_type="semester_wise")
+    # Day 1: 2026-11-02
+    day1_fn = next(s for s in slots if s["date"] == "2026-11-02" and s["session"] == "FN")
+    day1_an = next(s for s in slots if s["date"] == "2026-11-02" and s["session"] == "AN")
+    assert day1_fn["target_sem"] == 3
+    assert day1_fn["is_arrear_sweep"] is False
+    assert day1_an["target_sem"] == 3
+    assert day1_an["is_arrear_sweep"] is True
+
+    # Day 2: 2026-11-03
+    day2_fn = next(s for s in slots if s["date"] == "2026-11-03" and s["session"] == "FN")
+    day2_an = next(s for s in slots if s["date"] == "2026-11-03" and s["session"] == "AN")
+    assert day2_fn["target_sem"] == 5
+    assert day2_fn["is_arrear_sweep"] is False
+    assert day2_an["target_sem"] == 5
+    assert day2_an["is_arrear_sweep"] is True
+
+    # Day 3: 2026-11-04
+    day3_fn = next(s for s in slots if s["date"] == "2026-11-04" and s["session"] == "FN")
+    day3_an = next(s for s in slots if s["date"] == "2026-11-04" and s["session"] == "AN")
+    assert day3_fn["target_sem"] == 7
+    assert day3_fn["is_arrear_sweep"] is False
+    assert day3_an["target_sem"] == 7
+    assert day3_an["is_arrear_sweep"] is True
+
+
 def from_iso(d_str):
     from datetime import date
     return date.fromisoformat(d_str)
+

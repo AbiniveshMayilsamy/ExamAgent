@@ -6,11 +6,12 @@ from data_loader import load_multi_year_dataset, load_students, build_dept_roll_
 from groq_service import assess_course_difficulties, generate_schedule_summary
 from agent1_calendar import build_calendar
 from agent3_matcher import build_course_clusters
-from agent4_harmonizer import assign_regular_slots
+from agent4_harmonizer import assign_regular_slots, apply_gap_fill
 from agent5_spacing import apply_spacing_rules
 from agent6_arrear import schedule_arrears
 from agent7_resolver import resolve_conflicts, suggest_manual_resolutions
 from agent2_conflict import check_conflicts
+from config import ScheduleConfig
 
 MAX_RETRIES = 15
 
@@ -27,9 +28,12 @@ def run_pipeline(
     difficulty_map: dict = None,
     use_groq_ai: bool = False,
     groq_api_key: str = None,
+    use_crewai: bool = False,
+    use_langchain: bool = False,
     year_session_pattern: dict = None,
     exams_per_branch: dict = None,
     on_agent_done=None,
+    pattern_type: str = "alternating",
 ) -> dict:
     """
     Central Hub pipeline.
@@ -75,7 +79,11 @@ def run_pipeline(
         audit_log.append(f"Groq AI / Heuristic: Assessed difficulty for {len(difficulty_map)} courses.")
 
     # ── Agent 1 ──────────────────────────────────────────────────────────────
-    open_slots, stats1 = build_calendar(start_date, end_date, leave_days or [], year_session_pattern)
+    # estimated_days must cover all courses: each cycle (4 slots) handles ~3 exams,
+    # so we need at least ceil(unique_courses / 3) * 2 exam days as a generous buffer.
+    _unique_reg_codes = len({e["course_code"] for e in enrolments if not e.get("is_arrear")})
+    _estimated_days = max(18, (_unique_reg_codes // 3) + 12)
+    open_slots, stats1 = build_calendar(start_date, end_date, leave_days or [], year_session_pattern, estimated_days=_estimated_days, pattern_type=pattern_type)
     audit_log.append(f"Agent 1: {stats1['total_slots']} slots across {stats1['exam_days']} days (End Date: {stats1['end_date']}).")
     open_slots = maybe_override(1, open_slots, stats1)
 
@@ -85,8 +93,12 @@ def run_pipeline(
     clusters = maybe_override(3, clusters, stats3)
 
     # ── Agent 4 ──────────────────────────────────────────────────────────────
-    draft, stats4 = assign_regular_slots(open_slots, clusters, year_session_pattern, dept_roll_ranges)
-    audit_log.append(f"Agent 4: Assigned {stats4['assigned']} regular courses.")
+    schedule_config = ScheduleConfig(pattern_type=pattern_type)
+    agent4_result = assign_regular_slots(open_slots, clusters, schedule_config, dept_roll_ranges)
+    draft    = agent4_result["draft_schedule"]
+    sweep    = agent4_result["arrear_sweep_slots"]
+    stats4   = agent4_result["stats"]
+    audit_log.append(f"Agent 4: {stats4['assigned']} regular courses assigned ({stats4['assigned_cycle']} cycle + {stats4['assigned_fallback']} fallback), {stats4['arrear_sweep_slots_reserved']} sweep slots reserved. Deferred to spacing pass: {stats4['unassigned_courses']}.")
     draft = maybe_override(4, draft, stats4)
 
     # ── Agent 5 ──────────────────────────────────────────────────────────────
@@ -96,8 +108,8 @@ def run_pipeline(
 
     # ── Agent 6 ──────────────────────────────────────────────────────────────
     arrear_enrolments = [r for r in enrolments if r.get("is_arrear")]
-    complete, stats6 = schedule_arrears(spaced, arrear_enrolments, open_slots, year_session_pattern, enrolments)
-    audit_log.append(f"Agent 6: Scheduled {stats6['arrear_slots_assigned']} arrear slots.")
+    complete, stats6 = schedule_arrears(spaced, arrear_enrolments, sweep, open_slots, enrolments)
+    audit_log.append(f"Agent 6: Scheduled {stats6['arrear_slots_assigned']} arrear slots ({stats6['tier_breakdown']['sweep']} via sweep, {stats6['tier_breakdown']['piggyback']} piggyback).")
     complete = maybe_override(6, complete, stats6)
 
     # ── Agent 2 with Retry ───────────────────────────────────────────────────

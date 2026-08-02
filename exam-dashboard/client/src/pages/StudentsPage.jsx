@@ -75,11 +75,11 @@ export default function StudentsPage() {
       
       // For Arrear Exams: match ONLY if student_reg_nos explicitly includes student.reg_no
       if (e.student_reg_nos && Array.isArray(e.student_reg_nos)) {
-        return e.student_reg_nos.includes(studentRegNo)
+        return e.student_reg_nos.map(String).includes(String(studentRegNo))
       }
       
-      // Fallback if student_reg_nos is not present
-      return (e.branches || []).includes(studentBranch) && e.semester === studentSem
+      // Fallback if student_reg_nos is not present (only if branch matches)
+      return e.is_arrear ? false : (e.branches || []).includes(studentBranch) && e.semester === studentSem
     })
 
     let filtered = matchedExams

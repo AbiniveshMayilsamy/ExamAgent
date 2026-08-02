@@ -45,6 +45,8 @@ export default function TimetablePage() {
   const pipeline = usePipelineContext() || {}
   const { schedule = [], conflicts = [], deptRollRanges = {}, stats = {}, students = [] } = pipeline
   
+  const initialPattern = pipeline.agentStats?.[1]?.pattern_type || 'alternating'
+  const [patternType, setPatternType] = useState(initialPattern)
   const [expandedDay, setExpandedDay] = useState(null)
   const [viewMode, setViewMode] = useState('matrix') // 'matrix', 'timeline', 'table'
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
@@ -69,33 +71,114 @@ export default function TimetablePage() {
   // Build Consolidated Master Matrix Grid (Date x Session x Dept)
   const matrixGrid = useMemo(() => {
     const rows = []
-    sortedDates.forEach(dateStr => {
-      const d = new Date(dateStr)
-      const dayShort = !isNaN(d.getTime()) ? DAY_NAMES[d.getDay()].slice(0, 3) : ''
-      const dateFormatted = formatDateDot(dateStr)
+    const semCycle = [3, 5, 7]
 
-      ;['FN', 'AN'].forEach(sess => {
-        const rowExams = (examsByDate[dateStr] || []).filter(e => e.session === sess)
-        if (rowExams.length === 0) return
+    if (patternType === 'semester_wise') {
+      // Group all regular and arrear courses by semester
+      const regBySem = {}
+      const arrBySem = {}
 
-        const deptMap = {}
-        ALL_DEPTS.forEach(dept => {
-          const matched = rowExams.filter(e => (e.branches || []).includes(dept))
-          deptMap[dept] = matched
-        })
+      safeSchedule.forEach(e => {
+        const sem = e.semester || 3
+        if (e.is_arrear) {
+          if (!arrBySem[sem]) arrBySem[sem] = []
+          arrBySem[sem].push(e)
+        } else {
+          if (!regBySem[sem]) regBySem[sem] = []
+          regBySem[sem].push(e)
+        }
+      })
 
-        rows.push({
-          date: dateStr,
-          dateFormatted,
-          dayShort,
-          session: sess,
-          deptMap,
-          totalExamsToday: rowExams.length
+      // Count how many days each semester appears in sortedDates
+      const semDayCount = { 3: 0, 5: 0, 7: 0 }
+      sortedDates.forEach((_, dayIdx) => {
+        const sem = semCycle[dayIdx % semCycle.length]
+        semDayCount[sem] = (semDayCount[sem] || 0) + 1
+      })
+
+      // Track how many courses placed per semester
+      const regPlacedIdx = { 3: 0, 5: 0, 7: 0, 1: 0, 2: 0, 4: 0, 6: 0, 8: 0 }
+      const arrPlacedIdx = { 3: 0, 5: 0, 7: 0, 1: 0, 2: 0, 4: 0, 6: 0, 8: 0 }
+
+      sortedDates.forEach((dateStr, dayIdx) => {
+        const d = new Date(dateStr)
+        const dayShort = !isNaN(d.getTime()) ? DAY_NAMES[d.getDay()].slice(0, 3) : ''
+        const dateFormatted = formatDateDot(dateStr)
+        const daySem = semCycle[dayIdx % semCycle.length]
+
+        const regList = regBySem[daySem] || []
+        const arrList = arrBySem[daySem] || []
+
+        const regPerDay = Math.max(1, Math.ceil(regList.length / (semDayCount[daySem] || 1)))
+        const arrPerDay = Math.max(1, Math.ceil(arrList.length / (semDayCount[daySem] || 1)))
+
+        ;['FN', 'AN'].forEach(sess => {
+          let rowExams = []
+          if (sess === 'FN') {
+            const start = regPlacedIdx[daySem] || 0
+            rowExams = regList.slice(start, start + regPerDay)
+            if (rowExams.length === 0 && start === 0) rowExams = regList
+            regPlacedIdx[daySem] = start + rowExams.length
+          } else {
+            const start = arrPlacedIdx[daySem] || 0
+            rowExams = arrList.slice(start, start + arrPerDay)
+            if (rowExams.length === 0 && start === 0) rowExams = arrList
+            arrPlacedIdx[daySem] = start + rowExams.length
+          }
+
+          if (rowExams.length === 0) return
+
+          const deptMap = {}
+          ALL_DEPTS.forEach(dept => {
+            const matched = rowExams.filter(e => (e.branches || []).includes(dept))
+            deptMap[dept] = matched
+          })
+
+          rows.push({
+            date: dateStr,
+            dateFormatted,
+            dayShort,
+            dayIndex: dayIdx,
+            daySem,
+            session: sess,
+            deptMap,
+            totalExamsToday: rowExams.length
+          })
         })
       })
-    })
+    } else {
+      // Default Alternating Cycle Pattern
+      sortedDates.forEach((dateStr, dayIdx) => {
+        const d = new Date(dateStr)
+        const dayShort = !isNaN(d.getTime()) ? DAY_NAMES[d.getDay()].slice(0, 3) : ''
+        const dateFormatted = formatDateDot(dateStr)
+        const daySem = semCycle[dayIdx % semCycle.length]
+
+        ;['FN', 'AN'].forEach(sess => {
+          const rowExams = (examsByDate[dateStr] || []).filter(e => e.session === sess)
+          if (rowExams.length === 0) return
+
+          const deptMap = {}
+          ALL_DEPTS.forEach(dept => {
+            const matched = rowExams.filter(e => (e.branches || []).includes(dept))
+            deptMap[dept] = matched
+          })
+
+          rows.push({
+            date: dateStr,
+            dateFormatted,
+            dayShort,
+            dayIndex: dayIdx,
+            daySem,
+            session: sess,
+            deptMap,
+            totalExamsToday: rowExams.length
+          })
+        })
+      })
+    }
     return rows
-  }, [sortedDates, examsByDate])
+  }, [sortedDates, examsByDate, safeSchedule, patternType])
 
   // Monthly stats
   const monthlyStats = useMemo(() => {
@@ -261,6 +344,65 @@ export default function TimetablePage() {
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+        {/* Schedule Pattern Type Toggle Bar on Timetable Page */}
+        <div className="card" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', border: '1px solid #3b82f6', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 18 }}>🔀</span>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: 16, fontWeight: 800 }}>Schedule Pattern View Toggle</h3>
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
+                Toggle timetable layout between Alternating Cycle Pattern and Semester-Dedicated Daily Pattern.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setPatternType('alternating')}
+                style={{
+                  padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  background: patternType === 'alternating' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#0f172a',
+                  color: patternType === 'alternating' ? '#ffffff' : '#94a3b8',
+                  border: patternType === 'alternating' ? '2px solid #60a5fa' : '1px solid #334155',
+                  boxShadow: patternType === 'alternating' ? '0 2px 8px rgba(37,99,235,0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                🔄 Alternating Cycle Pattern
+              </button>
+              <button
+                type="button"
+                onClick={() => setPatternType('semester_wise')}
+                style={{
+                  padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  background: patternType === 'semester_wise' ? 'linear-gradient(135deg, #7c3aed, #8b5cf6)' : '#0f172a',
+                  color: patternType === 'semester_wise' ? '#ffffff' : '#94a3b8',
+                  border: patternType === 'semester_wise' ? '2px solid #c084fc' : '1px solid #334155',
+                  boxShadow: patternType === 'semester_wise' ? '0 2px 8px rgba(124,58,237,0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                📅 Semester-Dedicated Daily Pattern
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span style={{ color: '#94a3b8', fontWeight: 600 }}>Active Layout Mode:</span>
+            {patternType === 'semester_wise' ? (
+              <span style={{ background: '#4c1d95', color: '#e9d5ff', padding: '3px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #8b5cf6' }}>
+                📅 Semester-Dedicated Daily Layout (Day 1: Sem 3 FN+AN | Day 2: Sem 5 FN+AN | Day 3: Sem 7 FN+AN)
+              </span>
+            ) : (
+              <span style={{ background: '#1e3a8a', color: '#bfdbfe', padding: '3px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #3b82f6' }}>
+                🔄 Alternating Cycle Layout (Day 1 FN: Sem 3, Day 1 AN: Sem 5, Day 2 FN: Sem 7, Day 2 AN: Arrear)
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Monthly Overview */}
         <div className="card">
           <h3 style={{ marginBottom: 16 }}>📊 Exams per Month & Distribution</h3>
@@ -394,7 +536,12 @@ export default function TimetablePage() {
                       }}
                     >
                       <td style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'center', color: '#1e293b', borderRight: '1px solid #e2e8f0' }}>
-                        {row.dateFormatted}
+                        <div>{row.dateFormatted}</div>
+                        {patternType === 'semester_wise' && (
+                          <span style={{ fontSize: 9, background: '#f3e8ff', color: '#6d28d9', padding: '1px 5px', borderRadius: 4, fontWeight: 800, display: 'inline-block', marginTop: 3, border: '1px solid #c084fc' }}>
+                            Sem {row.daySem} Day
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '8px 6px', fontWeight: 700, textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0' }}>
                         {row.dayShort}
@@ -407,6 +554,11 @@ export default function TimetablePage() {
                         }}>
                           {row.session}
                         </span>
+                        {patternType === 'semester_wise' && (
+                          <div style={{ fontSize: 9, fontWeight: 700, color: row.session === 'FN' ? '#2563eb' : '#d97706', marginTop: 2 }}>
+                            {row.session === 'FN' ? 'Regular' : 'Arrear'}
+                          </div>
+                        )}
                       </td>
 
                       {activeDepts.map(dept => {

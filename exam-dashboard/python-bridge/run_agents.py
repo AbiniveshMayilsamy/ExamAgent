@@ -10,6 +10,7 @@ import os
 import json
 import argparse
 from datetime import datetime
+from collections import defaultdict
 
 # Add exam-cell-agent to python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../exam-cell-agent')))
@@ -19,11 +20,12 @@ from data_loader import load_multi_year_dataset, build_dept_roll_ranges
 from agent1_calendar import build_calendar
 from agent2_conflict import check_conflicts
 from agent3_matcher import build_course_clusters
-from agent4_harmonizer import assign_regular_slots
+from agent4_harmonizer import assign_regular_slots, apply_gap_fill
 from agent5_spacing import apply_spacing_rules
 from agent6_arrear import schedule_arrears
 from agent7_resolver import resolve_cumulative_conflicts
 from groq_service import assess_course_difficulties, generate_schedule_summary
+from config import ScheduleConfig
 
 
 def emit(data):
@@ -42,6 +44,7 @@ def main():
     parser.add_argument("--arrear-file", default=None)
     parser.add_argument("--start-dates", default="{}")
     parser.add_argument("--leaves", default="[]")
+    parser.add_argument("--pattern-type", default="alternating", choices=["alternating", "semester_wise"])
     parser.add_argument("--use-groq-ai", action="store_true")
     parser.add_argument("--human-intervention", action="store_true")
     
@@ -51,6 +54,8 @@ def main():
     parser.add_argument("--end-date", default=None)
     
     args = parser.parse_args()
+
+    pattern_type = args.pattern_type
 
     regular_file = args.regular_file or args.file
     year_files = {
@@ -91,16 +96,16 @@ def main():
         "agentId": 1,
         "agentName": "Calendar & Session Manager",
         "functionType": "Calendar Builder",
-        "rules": "Rules 1, 8 — max 2 sessions/day, leave days exclusion"
+        "rules": f"Rules 1, 8 — max 2 sessions/day, leave days exclusion (Pattern: {pattern_type})"
     })
     
     # Dynamic calendar horizon based on total course count
     reg_count = len({e["course_code"] for e in enrolments if not e.get("is_arrear")})
     est_days = max(18, (reg_count // 3) + 10)
     
-    slots1, stats1 = build_calendar(start_date, leave_days=leave_days, estimated_days=est_days)
+    slots1, stats1 = build_calendar(start_date, leave_days=leave_days, estimated_days=est_days, pattern_type=pattern_type)
     agent_stats[1] = stats1
-    emit({"event": "agent_log", "agentId": 1, "message": f"Generated {len(slots1)} available session slots through {stats1['end_date']}."})
+    emit({"event": "agent_log", "agentId": 1, "message": f"Generated {len(slots1)} available session slots through {stats1['end_date']} (Pattern: {pattern_type})."})
     emit({"event": "agent_done", "agentId": 1, "summary": f"Built {len(slots1)} slots across {stats1['total_days']} exam days.", "stats": stats1})
 
     # Optional Groq AI Course Difficulty Tagging
@@ -130,10 +135,14 @@ def main():
         "agentId": 4,
         "agentName": "Regular Stream Harmonizer",
         "functionType": "Slot Harmonizer",
-        "rules": "Rule 4 — regular course slot assignment"
+        "rules": f"Rule 4 — regular course slot assignment (Pattern: {pattern_type})"
     })
     reg_clusters = [c for c in clusters if not c.get("is_arrear")]
-    spaced, stats4 = assign_regular_slots(reg_clusters, slots1)
+    schedule_config = ScheduleConfig(pattern_type=pattern_type)
+    agent4_result = assign_regular_slots(slots1, reg_clusters, schedule_config)
+    spaced  = agent4_result["draft_schedule"]
+    sweep   = agent4_result["arrear_sweep_slots"]
+    stats4  = agent4_result["stats"]
     agent_stats[4] = stats4
     emit({"event": "agent_log", "agentId": 4, "message": f"Harmonized {len(spaced)} regular course slots."})
     emit({"event": "agent_done", "agentId": 4, "summary": f"Harmonized {len(spaced)} regular exam slots.", "stats": stats4})
@@ -160,7 +169,7 @@ def main():
         "rules": "Rule 7 — opposite session arrear placement"
     })
     arr_enrolments = [e for e in enrolments if e.get("is_arrear")]
-    complete, stats6 = schedule_arrears(spaced_opt, arr_enrolments, slots1, all_enrolments=enrolments)
+    complete, stats6 = schedule_arrears(spaced_opt, arr_enrolments, sweep, slots1, all_enrolments=enrolments)
     agent_stats[6] = stats6
     emit({"event": "agent_log", "agentId": 6, "message": f"Placed {stats6['arrear_slots_assigned']} arrear courses."})
     emit({"event": "agent_done", "agentId": 6, "summary": f"Scheduled {stats6['arrear_slots_assigned']} arrear slots.", "stats": stats6})
@@ -187,29 +196,44 @@ def main():
     emit({"event": "agent_done", "agentId": 2, "summary": f"Status: {final_status}.", "stats": {"conflicts": len(final_conflicts)}})
     emit({"event": "agent_done", "agentId": 7, "summary": f"Final Resolution Status: {final_status}.", "stats": {"conflicts": len(final_conflicts)}})
 
-    # Build unique student list (prioritize real names & regular enrolment records)
+    # Build student roll mapping per (branch, semester) for regular schedule items
+    reg_stus_by_branch_sem = defaultdict(list)
     seen_stus = {}
+
+    # Pass 1: Regular enrolments ONLY (sets real active semester, branch, and name)
     for row in enrolments:
-        rn = row["reg_no"]
-        is_arr = row.get("is_arrear", False)
-        
-        if rn not in seen_stus:
-            seen_stus[rn] = {
-                "reg_no": rn,
-                "name": row["name"],
-                "branch": row["branch"],
-                "semester": row["semester"],
-                "is_arrear_entry": is_arr
-            }
-        else:
-            if not is_arr and (seen_stus[rn]["is_arrear_entry"] or seen_stus[rn]["name"].startswith("Student ")):
+        if not row.get("is_arrear", False):
+            rn = str(row["reg_no"]).strip()
+            if rn not in seen_stus:
                 seen_stus[rn] = {
                     "reg_no": rn,
-                    "name": row["name"],
+                    "name": row.get("name", f"Student {rn}"),
                     "branch": row["branch"],
                     "semester": row["semester"],
-                    "is_arrear_entry": False
                 }
+            reg_stus_by_branch_sem[(row["branch"], row["semester"])].append(rn)
+
+    # Pass 2: Arrear enrolments (add any arrear-only students if not in regular)
+    for row in enrolments:
+        if row.get("is_arrear", False):
+            rn = str(row["reg_no"]).strip()
+            if rn not in seen_stus:
+                seen_stus[rn] = {
+                    "reg_no": rn,
+                    "name": row.get("name", f"Student {rn}"),
+                    "branch": row["branch"],
+                    "semester": row["semester"],
+                }
+
+    # Attach student_reg_nos to all schedule items (regular & arrear)
+    for entry in schedule:
+        if not entry.get("is_arrear", False):
+            stus = []
+            for br in entry.get("branches", []):
+                stus.extend(reg_stus_by_branch_sem.get((br, entry.get("semester")), []))
+            entry["student_reg_nos"] = sorted(list(set(stus)))
+        elif "student_reg_nos" in entry and isinstance(entry["student_reg_nos"], list):
+            entry["student_reg_nos"] = [str(r).strip() for r in entry["student_reg_nos"]]
 
     students_list = [
         {

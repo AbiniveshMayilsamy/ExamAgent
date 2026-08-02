@@ -11,6 +11,7 @@ export default function SchedulePage() {
   // Mode & Semester Type State
   const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
+  const [patternType, setPatternType] = useState('alternating') // 'alternating' | 'semester_wise'
 
   // Files & Start Dates (Odd sem -> 2026-11-02 Nov/Dec, Even sem -> 2026-04-20 Apr/May)
   const [masterFile, setMasterFile] = useState(null)
@@ -95,6 +96,7 @@ export default function SchedulePage() {
     try {
       const fd = new FormData()
       fd.append('semType', semType)
+      fd.append('patternType', patternType)
       fd.append('leaveDays', JSON.stringify(holidays))
       fd.append('useGroqAI', useGroqAI)
       fd.append('humanIntervention', humanIntervention)
@@ -194,6 +196,51 @@ export default function SchedulePage() {
                 />
                 <span>Even Semesters (Apr / May 2026 — Semesters 2, 4, 6, 8)</span>
               </label>
+            </div>
+          </div>
+
+          {/* 2. Schedule Pattern Toggle Switch */}
+          <div className="card" style={{ borderLeft: '4px solid #3b82f6' }}>
+            <h3 style={{ marginBottom: 6, color: '#1d4ed8' }}>2. Select Schedule Pattern Type</h3>
+            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+              Choose how regular semester exams and arrear sessions rotate across calendar days.
+            </p>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <button
+                type="button"
+                onClick={() => setPatternType('alternating')}
+                style={{
+                  flex: 1, padding: '12px 16px', borderRadius: 8, textAlign: 'left',
+                  border: patternType === 'alternating' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  background: patternType === 'alternating' ? '#eff6ff' : '#f8fafc',
+                  color: patternType === 'alternating' ? '#1e3a8a' : '#475569', cursor: 'pointer'
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 14, color: patternType === 'alternating' ? '#1d4ed8' : '#1e293b' }}>
+                  🔄 Alternating Cycle Pattern (Default)
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                  Day 1 FN (Sem 3), Day 1 AN (Sem 5), Day 2 FN (Sem 7), Day 2 AN (Arrear Sweep)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPatternType('semester_wise')}
+                style={{
+                  flex: 1, padding: '12px 16px', borderRadius: 8, textAlign: 'left',
+                  border: patternType === 'semester_wise' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                  background: patternType === 'semester_wise' ? '#f5f3ff' : '#f8fafc',
+                  color: patternType === 'semester_wise' ? '#4c1d95' : '#475569', cursor: 'pointer'
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 14, color: patternType === 'semester_wise' ? '#6d28d9' : '#1e293b' }}>
+                  📅 Semester-Dedicated Daily Pattern (New Feature)
+                </div>
+                <div style={{ fontSize: 12, color: '#6d28d9', marginTop: 4 }}>
+                  Day 1: Sem 3 FN + Arrear AN | Day 2: Sem 5 FN + Arrear AN | Day 3: Sem 7 FN + Arrear AN
+                </div>
+              </button>
             </div>
           </div>
 

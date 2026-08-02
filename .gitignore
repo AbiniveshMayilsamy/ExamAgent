@@ -33,6 +33,12 @@ uploads/
 # Firebase
 .firebase/
 
+# Render CLI
+render.zip
+cli_*.exe
+render.exe
+
+
 .DS_Store
 .vscode/
 .idea/

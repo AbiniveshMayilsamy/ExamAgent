@@ -98,3 +98,6 @@ mongoose
     )
   })
 
+module.exports = app
+
+

@@ -26,7 +26,9 @@ const parseAllowedOrigins = () => {
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'http://127.0.0.1:5173',
-    'https://abiniveshmayilsamy.github.io'
+    'https://abiniveshmayilsamy.github.io',
+    'https://schedulex-ai-sece.web.app',
+    'https://schedulex-ai-sece.firebaseapp.com'
   ]
   if (!process.env.CLIENT_URL || process.env.CLIENT_URL === '*') {
     return '*'

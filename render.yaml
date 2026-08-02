@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: exam-dashboard-backend
+    env: node
+    rootDir: exam-dashboard/server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        value: https://schedulex-ai-sece.web.app

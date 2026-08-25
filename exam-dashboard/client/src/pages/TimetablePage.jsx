@@ -54,17 +54,23 @@ export default function TimetablePage() {
 
   const safeSchedule = useMemo(() => (Array.isArray(schedule) ? schedule : []), [schedule])
 
-  // Group exams by date
+  // Apply dept filter to the schedule before any grouping
+  const filteredSchedule = useMemo(() => {
+    if (deptFilter === 'ALL') return safeSchedule
+    return safeSchedule.filter(e => (e.branches || []).includes(deptFilter))
+  }, [safeSchedule, deptFilter])
+
+  // Group exams by date (uses filtered schedule)
   const examsByDate = useMemo(() => {
     const map = {}
-    safeSchedule.forEach(e => {
+    filteredSchedule.forEach(e => {
       if (e && e.date) {
         if (!map[e.date]) map[e.date] = []
         map[e.date].push(e)
       }
     })
     return map
-  }, [safeSchedule])
+  }, [filteredSchedule])
 
   const sortedDates = useMemo(() => Object.keys(examsByDate).sort(), [examsByDate])
 

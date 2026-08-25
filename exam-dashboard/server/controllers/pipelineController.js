@@ -57,6 +57,7 @@ async function triggerPipeline(req, res) {
   })
 
   const primaryFileName = files[0].originalname
+  const store = getStore()
 
   const run = await store.create({
     inputFile: primaryFileName,

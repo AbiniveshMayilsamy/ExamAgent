@@ -116,22 +116,23 @@ def main():
 
     # ── Step 4: Agent 4 — Assign slots ───────────────────────────────────────
     print("Agent 4: Assigning regular slots (cycle-walking) …")
-    draft, stats4 = assign_regular_slots(clusters, open_slots)
+    res4 = assign_regular_slots(open_slots, clusters)
+    draft = res4["draft_schedule"]
+    arrear_sweep_slots = res4["arrear_sweep_slots"]
+    stats4 = res4["stats"]
     print(f"  Assigned {stats4['regular_courses_assigned']} courses. "
           f"Unassigned: {stats4['unassigned_courses']}.\n")
 
     # ── Step 5: Agent 6 — Arrear scheduling ──────────────────────────────────
     print("Agent 6: Scheduling arrears …")
-    complete, stats6 = schedule_arrears(draft, arrear_enrolments, open_slots,
+    complete, stats6 = schedule_arrears(draft, arrear_enrolments, arrear_sweep_slots, open_slots,
                                         all_enrolments=enrolments)
     print(f"  Arrear courses: {stats6['arrear_courses']}, "
           f"Assigned: {stats6['arrear_slots_assigned']}, "
           f"Sweep slots: {stats6['sweep_slots_available']}.")
     tiers = stats6["tier_breakdown"]
-    print(f"  Tier 0 (cycle sweep)   : {tiers['cycle_sweep']}")
-    print(f"  Tier 1 (regular+arrear): {tiers['regular_cum_arrear']}")
-    print(f"  Tier 2 (reg-window AN) : {tiers['non_matching_reg_window']}")
-    print(f"  Tier 3 (post-regular)  : {tiers['excess_post_regular']}\n")
+    for k, v in tiers.items():
+        print(f"  Tier {k} : {v}")
 
     # ── Validate schedule pattern for first 5-6 exam days ────────────────────
     print(f"{BOLD}--- Schedule Pattern Validation (first 5-6 sessions) ---{RESET}")

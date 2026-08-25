@@ -53,7 +53,7 @@ const corsOriginHandler = (origin, callback) => {
 }
 
 const corsOptions = {
-  origin: origins === '*' ? '*' : corsOriginHandler,
+  origin: corsOriginHandler,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }
@@ -81,7 +81,7 @@ const PORT = process.env.PORT || 5000
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/examschedule'
 
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGO_URI, { serverSelectionTimeoutMS: 2000 })
   .then(() => {
     console.log('MongoDB connected')
     setDbReady(true)

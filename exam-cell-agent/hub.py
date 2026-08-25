@@ -11,7 +11,7 @@ from agent5_spacing import apply_spacing_rules
 from agent6_arrear import schedule_arrears
 from agent7_resolver import resolve_conflicts, suggest_manual_resolutions
 from agent2_conflict import check_conflicts
-from config import ScheduleConfig
+from config import ScheduleConfig, get_semester_session_cycle, sem_to_year
 
 MAX_RETRIES = 15
 
@@ -79,11 +79,22 @@ def run_pipeline(
         audit_log.append(f"Groq AI / Heuristic: Assessed difficulty for {len(difficulty_map)} courses.")
 
     # ── Agent 1 ──────────────────────────────────────────────────────────────
+    # Derive active semester cycle dynamically for multi-file runs; use standard cycle for legacy single-source runs
+    active_sems = sorted(list({e["semester"] for e in enrolments if not e.get("is_arrear") and "semester" in e}))
+    if (regular_file or year_files) and active_sems:
+        sem_cycle = [{"semester": s, "year_label": str(sem_to_year(s))} for s in active_sems]
+    else:
+        sem_cycle = get_semester_session_cycle(sem_type)
+
     # estimated_days must cover all courses: each cycle (4 slots) handles ~3 exams,
     # so we need at least ceil(unique_courses / 3) * 2 exam days as a generous buffer.
     _unique_reg_codes = len({e["course_code"] for e in enrolments if not e.get("is_arrear")})
     _estimated_days = max(18, (_unique_reg_codes // 3) + 12)
-    open_slots, stats1 = build_calendar(start_date, end_date, leave_days or [], year_session_pattern, estimated_days=_estimated_days, pattern_type=pattern_type)
+    open_slots, stats1 = build_calendar(
+        start_date, end_date, leave_days or [], year_session_pattern,
+        estimated_days=_estimated_days, pattern_type=pattern_type,
+        semester_cycle=sem_cycle
+    )
     audit_log.append(f"Agent 1: {stats1['total_slots']} slots across {stats1['exam_days']} days (End Date: {stats1['end_date']}).")
     open_slots = maybe_override(1, open_slots, stats1)
 
@@ -93,7 +104,7 @@ def run_pipeline(
     clusters = maybe_override(3, clusters, stats3)
 
     # ── Agent 4 ──────────────────────────────────────────────────────────────
-    schedule_config = ScheduleConfig(pattern_type=pattern_type)
+    schedule_config = ScheduleConfig(pattern_type=pattern_type, semester_cycle=sem_cycle)
     agent4_result = assign_regular_slots(open_slots, clusters, schedule_config, dept_roll_ranges)
     draft    = agent4_result["draft_schedule"]
     sweep    = agent4_result["arrear_sweep_slots"]

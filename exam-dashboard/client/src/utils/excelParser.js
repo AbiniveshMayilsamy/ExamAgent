@@ -65,10 +65,26 @@ export function extractSemFromCourseCode(courseCode, fallbackSem = 1) {
   if (!courseCode) return fallbackSem
   const code = String(courseCode).toUpperCase().trim()
 
-  if (['U23MA209', 'U23MA210', 'U23MA282'].includes(code)) return 4
-  if (code.startsWith('U23O') || code.startsWith('19O') || code.startsWith('20O')) return 4
+  if (['U23MA209', 'U23MA210', 'U23MA282', 'U23OME04', 'U23OME06', 'U23OCS86'].includes(code)) return 4
+  if (['U23MA204', 'U23OAD81'].includes(code)) return 3
 
-  const match = code.match(/[A-Z]{2,4}(\d{3})/)
+  const codeNoReg = code.replace(/^(U23|U22|U24|19|20|21|22|23)/, '')
+
+  // 1. U23 / U22 / U24 Regulation (e.g. U23CS301 -> 3, U23EC402 -> 4)
+  const uMatch = code.match(/^U\d{2}[A-Z]{2,4}(\d)/)
+  if (uMatch) {
+    const sem = parseInt(uMatch[1], 10)
+    if (sem >= 1 && sem <= 8) return sem
+  }
+
+  // 2. Anna University 2021 Regulation
+  const au21Match = code.match(/^[A-Z]{2,4}3([1-8])\d{2}$/)
+  if (au21Match) {
+    return parseInt(au21Match[1], 10)
+  }
+
+  // 3. Match 3-digit subject pattern
+  const match = codeNoReg.match(/[A-Z]{2,4}(\d{3})/)
   if (match) {
     const digit3 = match[1]
     const semDigit = parseInt(digit3[0], 10)
@@ -78,12 +94,26 @@ export function extractSemFromCourseCode(courseCode, fallbackSem = 1) {
     }
   }
 
+  // 4. Open Elective pattern check
+  const oeMatch = codeNoReg.match(/[A-Z]{2,4}(\d{2,3})/)
+  if (oeMatch) {
+    const digits = oeMatch[1]
+    if (digits.length === 3 && '12345678'.includes(digits[0])) {
+      return parseInt(digits[0], 10)
+    } else if (digits.length === 2) {
+      const d0 = digits[0]
+      if ('345678'.includes(d0)) return parseInt(d0, 10)
+      if ('012'.includes(d0)) return (fallbackSem && fallbackSem !== 1) ? fallbackSem : 4
+    }
+  }
+
+  // 5. Fallback pattern match
   const match2 = code.match(/^[U\d]{0,3}[A-Z]{2,4}(\d)/)
   if (match2) {
     const semDigit = parseInt(match2[1], 10)
     if (semDigit >= 1 && semDigit <= 8) return semDigit
   }
-  return fallbackSem
+  return fallbackSem || 1
 }
 
 export async function parseExcelFileInBrowser(file, defaultSem = 1, isArrear = false) {
@@ -110,7 +140,14 @@ export async function parseExcelFileInBrowser(file, defaultSem = 1, isArrear = f
         let rollNo = null
         let dept = null
         let name = null
-        const rowSem = defaultSem
+        let rowSem = defaultSem
+
+        for (const item of rawClean) {
+          if (/^\d$/.test(item) && parseInt(item, 10) >= 1 && parseInt(item, 10) <= 8) {
+            rowSem = parseInt(item, 10)
+            break
+          }
+        }
 
         // 1. Reg No (12 digits)
         for (const item of rawClean) {
@@ -173,7 +210,9 @@ export async function parseExcelFileInBrowser(file, defaultSem = 1, isArrear = f
         const primaryId = regNo || rollNo
 
         if (primaryId && courseCode) {
-          const actualSem = isArrear ? extractSemFromCourseCode(courseCode, rowSem) : rowSem
+          const actualSem = isArrear
+            ? (rowSem !== defaultSem ? rowSem : extractSemFromCourseCode(courseCode, rowSem))
+            : rowSem
           records.push({
             name: name || `Student ${primaryId}`,
             reg_no: primaryId,

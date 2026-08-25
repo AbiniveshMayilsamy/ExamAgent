@@ -60,34 +60,57 @@ export default function StudentsPage() {
   }, [pipelineStudents])
 
   // Resolve student exams strictly from active schedule
-  const getStudentExams = (student) => {
-    if (!student || schedule.length === 0) return []
+  const resolveExamsForStudent = (student) => {
+    if (!student || !schedule || schedule.length === 0) return []
 
-    const studentRegNo = student.reg_no
+    const studentRegNo = String(student.reg_no || '').trim().toUpperCase()
+    const studentRollNo = String(student.roll_no || '').trim().toUpperCase()
     const studentBranch = student.branch
     const studentSem = student.semester
 
-    const matchedExams = schedule.filter(e => {
+    return schedule.filter(e => {
       // For Regular Exams: match branch and semester
       if (!e.is_arrear) {
         return (e.branches || []).includes(studentBranch) && e.semester === studentSem
       }
-      
-      // For Arrear Exams: match ONLY if student_reg_nos explicitly includes student.reg_no
-      if (e.student_reg_nos && Array.isArray(e.student_reg_nos)) {
-        return e.student_reg_nos.map(String).includes(String(studentRegNo))
+
+      // For Arrear Exams:
+      // 1. Match if student_reg_nos / students / roll_nos explicitly lists this student
+      const studentList = [
+        ...(Array.isArray(e.student_reg_nos) ? e.student_reg_nos : []),
+        ...(Array.isArray(e.students) ? e.students : []),
+        ...(Array.isArray(e.roll_nos) ? e.roll_nos : []),
+      ].map(r => String(r).trim().toUpperCase())
+
+      if (studentList.length > 0) {
+        const matchesReg = Boolean(studentRegNo && studentList.includes(studentRegNo))
+        const matchesRoll = Boolean(studentRollNo && studentList.includes(studentRollNo))
+        if (matchesReg || matchesRoll) return true
+        return false
       }
-      
-      // Fallback if student_reg_nos is not present (only if branch matches)
-      return e.is_arrear ? false : (e.branches || []).includes(studentBranch) && e.semester === studentSem
+
+      // 2. Fallback: match by branch if arrear course semester is less than student's current semester
+      if (e.branches && Array.isArray(e.branches) && e.branches.includes(studentBranch)) {
+        return e.semester ? e.semester < studentSem : true
+      }
+
+      return false
+    }).sort((a, b) => {
+      if (a.date && b.date) return a.date > b.date ? 1 : -1
+      return 0
     })
-
-    let filtered = matchedExams
-    if (selectedType === 'REGULAR') filtered = matchedExams.filter(e => !e.is_arrear)
-    if (selectedType === 'ARREAR') filtered = matchedExams.filter(e => e.is_arrear)
-
-    return filtered.sort((a, b) => (a.date > b.date ? 1 : -1))
   }
+
+  // For the student detail drawer: respects the UI type filter (REGULAR / ARREAR / ALL)
+  const getStudentExams = (student) => {
+    const all = resolveExamsForStudent(student)
+    if (selectedType === 'REGULAR') return all.filter(e => !e.is_arrear)
+    if (selectedType === 'ARREAR') return all.filter(e => e.is_arrear)
+    return all
+  }
+
+  // For hall tickets: ALWAYS returns ALL exams (regular + arrear) — never filtered by UI state
+  const getStudentExamsAll = (student) => resolveExamsForStudent(student)
 
   // Filter students based on search controls (always preserved in numeric Register Number order)
   const filteredStudents = useMemo(() => {
@@ -101,9 +124,16 @@ export default function StudentsPage() {
       const matchesBranch = selectedBranch === 'ALL' || s.branch === selectedBranch
       const matchesSem = selectedSem === 'ALL' || s.semester === parseInt(selectedSem, 10)
 
-      return matchesSearch && matchesBranch && matchesSem
+      let matchesType = true
+      if (selectedType === 'REGULAR') {
+        matchesType = resolveExamsForStudent(s).some(e => !e.is_arrear)
+      } else if (selectedType === 'ARREAR') {
+        matchesType = resolveExamsForStudent(s).some(e => e.is_arrear)
+      }
+
+      return matchesSearch && matchesBranch && matchesSem && matchesType
     })
-  }, [allStudents, search, selectedBranch, selectedSem])
+  }, [allStudents, search, selectedBranch, selectedSem, selectedType, schedule])
 
   // Dedicated Bulk Download for CSE Hall Tickets sorted by Register Number
   const handleBulkDownloadCSE = () => {
@@ -386,7 +416,7 @@ export default function StudentsPage() {
       {/* Single Hall Ticket Modal */}
       <HallTicketModal
         student={activeStudent}
-        getStudentExams={getStudentExams}
+        getStudentExams={getStudentExamsAll}
         isOpen={isHallTicketOpen}
         onClose={() => setIsHallTicketOpen(false)}
       />
@@ -395,7 +425,7 @@ export default function StudentsPage() {
       <HallTicketModal
         students={bulkPrintStudents}
         branchTitle={bulkBranchTitle}
-        getStudentExams={getStudentExams}
+        getStudentExams={getStudentExamsAll}
         isOpen={isBulkPrintOpen}
         onClose={() => setIsBulkPrintOpen(false)}
       />

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
+const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
 
 const AGENT_DETAIL = {
   1: {
@@ -48,18 +48,10 @@ const AGENT_DETAIL = {
   2: {
     name: 'Student Conflict Checker',
     functionType: 'Conflict Gatekeeper',
-    description: 'Final gatekeeper agent. Accurately verifies every student to guarantee 0 clashes across all regular and arrear slots.',
+    description: 'Final gatekeeper agent. Verifies every student to guarantee 0 clashes across all regular and arrear slots. Retries up to 15 times, routing conflicts back to Agent 5 or 6.',
     rules: ['Rule 2 — 1 student, max 1 exam per session'],
     color: '#dc2626',
     chartType: 'gatekeeper',
-  },
-  7: {
-    name: 'Cumulative Conflict Resolver',
-    functionType: 'Conflict Resolution Expert',
-    description: 'Analyzes any potential student clashes holistically and shifts slots to achieve 100% clash-free schedules.',
-    rules: ['Rule 2 Extended — Holistic conflict resolution', 'Rule 7 Extended — Slot shifting for zero clashes'],
-    color: '#8b5cf6',
-    chartType: 'resolver',
   },
 }
 
@@ -102,9 +94,9 @@ export default function AgentPipelinePage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Interactive AI Agent Pipeline & Live Stats</h1>
+          <h1>Scheduling Pipeline & Live Stats</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>
-            7 Autonomous AI Agents collaborating in sequence to build a 100% conflict-free timetable
+            6 deterministic scheduling steps running in sequence to build a 100% conflict-free timetable
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -119,7 +111,7 @@ export default function AgentPipelinePage() {
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         
         {/* Completion Banner */}
-        {(pipelineStatus === 'done' || pipelineStatus === 'manual_review') && (
+        {pipelineStatus === 'done' && (
           <div style={{
             background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 10,
             padding: '16px 24px', color: '#166534', display: 'flex', alignItems: 'center',
@@ -129,7 +121,7 @@ export default function AgentPipelinePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 24 }}>🎉</span>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800 }}>All AI Agents Executed Successfully!</div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>Pipeline Completed — Zero Conflicts!</div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: '#15803d', marginTop: 2 }}>
                   Status: <strong>PASS (0 Student Clashes)</strong> · {totalExams} Total Sessions Scheduled ({regularExams} Regular, {arrearExams} Arrears)
                 </div>
@@ -140,7 +132,31 @@ export default function AgentPipelinePage() {
               className="btn btn-primary"
               style={{ background: '#15803d', padding: '8px 18px', fontSize: 13, fontWeight: 700 }}
             >
-              Explore Timetable ➔
+              View Timetable ➔
+            </button>
+          </div>
+        )}
+        {pipelineStatus === 'manual_review' && (
+          <div style={{
+            background: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 10,
+            padding: '16px 24px', color: '#92400e', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', fontWeight: 700, fontSize: 14,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 24 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>Manual Review Required</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#b45309', marginTop: 2 }}>
+                  Some conflicts could not be auto-resolved after 15 retries. Review the Timetable page to resolve manually.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/timetable')}
+              className="btn btn-secondary"
+              style={{ padding: '8px 18px', fontSize: 13, fontWeight: 700 }}
+            >
+              Review Conflicts ➔
             </button>
           </div>
         )}
@@ -264,60 +280,83 @@ export default function AgentPipelinePage() {
                   {/* Agent 1 Stats */}
                   {id === 1 && (
                     <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: meta.color }}>{stats.total_slots || 50}</div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Open Slots Grid</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: meta.color }}>{stats.exam_days || 25}</div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exam Days</div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 8, fontSize: 11, color: '#475569', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
-                        <span>Holidays Excluded: <strong>{(stats.leave_days_excluded || 2)}</strong></span>
-                        <span>Sessions: <strong>FN + AN</strong></span>
-                      </div>
+                      {st === 'idle' ? (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Run a schedule to see calendar stats</div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: 18, fontWeight: 800, color: meta.color }}>{stats.total_slots ?? '-'}</div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Open Slots</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 18, fontWeight: 800, color: meta.color }}>{stats.exam_days ?? '-'}</div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exam Days</div>
+                            </div>
+                          </div>
+                          <div style={{ marginTop: 8, fontSize: 11, color: '#475569', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
+                            <span>Holidays Excluded: <strong>{stats.leave_days_excluded ?? 0}</strong></span>
+                            <span>Sessions: <strong>FN + AN</strong></span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
                   {/* Agent 3 Stats */}
                   {id === 3 && (
                     <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, textAlign: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: meta.color }}>{stats.total_courses || 42}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Courses</div>
+                      {st === 'idle' ? (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Run a schedule to see course stats</div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, textAlign: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: meta.color }}>{stats.total_courses ?? '-'}</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Courses</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>{stats.shared_courses ?? '-'}</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Shared Clusters</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#2563eb' }}>{stats.single_branch_courses ?? '-'}</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Single Branch</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>{stats.shared_courses || 14}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Shared Clusters</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#2563eb' }}>{stats.single_branch_courses || 28}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Single Branch</div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   )}
 
                   {/* Agent 4 Stats */}
-                  {id === 4 && (
-                    <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Session Slot Split:</span>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: meta.color }}>{stats.assigned || 42} Assigned</span>
+                  {id === 4 && (() => {
+                    const fnCount = schedule.filter(e => !e.is_arrear && e.session === 'FN').length
+                    const anCount = schedule.filter(e => !e.is_arrear && e.session === 'AN').length
+                    const total = fnCount + anCount || 1
+                    const fnPct = Math.round((fnCount / total) * 100)
+                    const anPct = 100 - fnPct
+                    return (
+                      <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #e2e8f0' }}>
+                        {st === 'idle' ? (
+                          <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Run a schedule to see slot stats</div>
+                        ) : (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Session Slot Split:</span>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: meta.color }}>{stats.assigned ?? '-'} Assigned</span>
+                            </div>
+                            <div style={{ height: 8, background: '#cbd5e1', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                              <div style={{ width: `${fnPct}%`, background: '#2563eb', transition: 'width 0.4s' }} title="Morning FN" />
+                              <div style={{ width: `${anPct}%`, background: '#0891b2', transition: 'width 0.4s' }} title="Afternoon AN" />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4, fontWeight: 600 }}>
+                              <span>🟦 FN ({fnPct}%) — {fnCount} slots</span>
+                              <span>🩵 AN ({anPct}%) — {anCount} slots</span>
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div style={{ height: 8, background: '#cbd5e1', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-                        <div style={{ width: '50%', background: '#2563eb' }} title="Morning FN" />
-                        <div style={{ width: '50%', background: '#0891b2' }} title="Afternoon AN" />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4, fontWeight: 600 }}>
-                        <span>🟦 Morning FN (50%)</span>
-                        <span>🩵 Afternoon AN (50%)</span>
-                      </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Agent 5 Stats */}
                   {id === 5 && (
@@ -338,29 +377,48 @@ export default function AgentPipelinePage() {
                   {/* Agent 6 Stats */}
                   {id === 6 && (
                     <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>{stats.arrear_courses || 96}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Arrear Courses</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#047857' }}>{stats.arrear_students || 452}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Enrolled Students</div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 10, color: '#047857', textAlign: 'center', fontWeight: 700 }}>
-                        ✓ Regular + Arrear in Opposite Session (Rule 7)
-                      </div>
+                      {st === 'idle' ? (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Run a schedule to see arrear stats</div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>{stats.arrear_courses ?? '-'}</div>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Arrear Courses</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#047857' }}>{stats.arrear_slots_assigned ?? '-'}</div>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Slots Assigned</div>
+                            </div>
+                          </div>
+                          <div style={{ marginTop: 6, fontSize: 10, color: '#047857', textAlign: 'center', fontWeight: 700 }}>
+                            ✓ Arrears in Opposite Session (Rule 7)
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {/* Agent 2 / 7 Stats */}
-                  {(id === 2 || id === 7) && (
-                    <div style={{ background: '#f0fdf4', padding: 12, borderRadius: 8, marginBottom: 10, border: '1px solid #86efac', textAlign: 'center' }}>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: '#166534' }}>0 Student Clashes</div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginTop: 2 }}>
-                        100% Conflict-Free Certified
-                      </div>
+                  {/* Agent 2 Stats */}
+                  {id === 2 && (
+                    <div style={{
+                      background: st === 'idle' ? '#f8fafc' : (stats.conflicts_found > 0 ? '#fef2f2' : '#f0fdf4'),
+                      padding: 12, borderRadius: 8, marginBottom: 10,
+                      border: `1px solid ${st === 'idle' ? '#e2e8f0' : (stats.conflicts_found > 0 ? '#fca5a5' : '#86efac')}`,
+                      textAlign: 'center'
+                    }}>
+                      {st === 'idle' ? (
+                        <div style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Run a schedule to see conflict check results</div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: stats.conflicts_found > 0 ? '#dc2626' : '#166534' }}>
+                            {stats.conflicts_found ?? 0} Student Clash{stats.conflicts_found !== 1 ? 'es' : ''}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: stats.conflicts_found > 0 ? '#dc2626' : '#15803d', textTransform: 'uppercase', marginTop: 2 }}>
+                            {stats.conflicts_found > 0 ? 'Conflicts Found — Retry Active' : '100% Conflict-Free Certified'}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 

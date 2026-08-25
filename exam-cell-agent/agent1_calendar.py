@@ -23,15 +23,17 @@ from config import (
 # The full 4-position rotation: 3 regular semesters + 1 arrear sweep.
 _CYCLE_LENGTH = len(SEMESTER_SESSION_CYCLE) + 1  # = 4
 
-def _cycle_tag(slot_index: int) -> dict:
+def _cycle_tag(slot_index: int, cycle_entries: list = None) -> dict:
     """
     Return the cycle metadata for a given slot index.
-    Positions 0-2 map to SEMESTER_SESSION_CYCLE entries.
-    Position 3 is the dedicated arrear-sweep session.
+    Positions map to cycle_entries.
+    The final position in each cycle is the dedicated arrear-sweep session.
     """
-    pos = slot_index % _CYCLE_LENGTH
-    if pos < len(SEMESTER_SESSION_CYCLE):
-        entry = SEMESTER_SESSION_CYCLE[pos]
+    entries = cycle_entries if cycle_entries else SEMESTER_SESSION_CYCLE
+    cycle_length = len(entries) + 1
+    pos = slot_index % cycle_length
+    if pos < len(entries):
+        entry = entries[pos]
         return {
             "target_sem": entry["semester"],
             "year_label": entry["year_label"],
@@ -56,18 +58,19 @@ def build_calendar(
     year_session_pattern: dict = None,
     estimated_days: int = 15,
     pattern_type: str = "alternating",
+    semester_cycle: list = None,
 ) -> tuple[list[dict], dict]:
     """
     Build the open slot grid for the exam window.
     If end_date is None, auto-calculates from start_date + estimated_days (excluding leave days).
 
     Supports two pattern types:
-      - "alternating": Ground-truth cycle rotation (Sem3 -> Sem5 -> Sem7 -> Arrear sweep)
-      - "semester_wise": Daily semester-dedicated pattern (Day 1: Sem 3 FN regular & Sem 3 AN arrear, Day 2: Sem 5 FN & AN arrear, etc.)
+      - "alternating": Ground-truth cycle rotation
+      - "semester_wise": Daily semester-dedicated pattern
 
     Each slot is tagged with:
       - date, session (FN/AN), time
-      - target_sem: the semester number (3/5/7) or "arrear" (for sweep sessions)
+      - target_sem: the semester number or "arrear" (for sweep sessions)
       - cycle_position: position within cycle
       - rotation_label: human-readable label
       - is_arrear_sweep: True for arrear sweep sessions
@@ -92,7 +95,7 @@ def build_calendar(
             tmp += timedelta(days=1)
         end = tmp + timedelta(days=5)  # buffer
 
-    cycle_entries = SEMESTER_SESSION_CYCLE
+    cycle_entries = semester_cycle if semester_cycle else SEMESTER_SESSION_CYCLE
 
     while current <= end:
         total_days += 1
@@ -126,7 +129,7 @@ def build_calendar(
                             "is_arrear_sweep": True,
                         }
                 else:
-                    tag = _cycle_tag(slot_idx)
+                    tag = _cycle_tag(slot_idx, cycle_entries)
 
                 slots.append({
                     "date": date_str,

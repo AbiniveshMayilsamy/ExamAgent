@@ -17,7 +17,25 @@ const DEPT_NAMES = {
 }
 
 const ROMAN_NUMS = {
-  1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII'
+  1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII',
+  '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V', '6': 'VI', '7': 'VII', '8': 'VIII',
+  'I': 'I', 'II': 'II', 'III': 'III', 'IV': 'IV', 'V': 'V', 'VI': 'VI', 'VII': 'VII', 'VIII': 'VIII'
+}
+
+function getRomanSem(exam) {
+  if (!exam) return 'I'
+  let sem = exam.semester || exam.sem
+  if (!sem) {
+    sem = extractSemFromCourseCode(exam.course_code)
+  }
+  if (typeof sem === 'string') {
+    const match = sem.match(/\d+/)
+    if (match) sem = parseInt(match[0], 10)
+    else if (['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].includes(sem.trim().toUpperCase())) {
+      return sem.trim().toUpperCase()
+    }
+  }
+  return ROMAN_NUMS[sem] || 'I'
 }
 
 function formatDateDot(dateStr) {
@@ -254,11 +272,10 @@ export default function HallTicketModal({ student, students = [], getStudentExam
                         </tr>
                       ) : (
                         studentExams.map((exam, idx) => {
-                          const resolvedSem = exam.semester || extractSemFromCourseCode(exam.course_code)
-                          const romanSem = ROMAN_NUMS[resolvedSem] || ROMAN_NUMS[extractSemFromCourseCode(exam.course_code)] || 'I'
+                          const romanSem = getRomanSem(exam)
 
                           return (
-                            <tr key={idx}>
+                            <tr key={idx} style={{ background: exam.is_arrear ? '#fffbe6' : 'transparent' }}>
                               <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>{idx + 1}</td>
                               <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 'bold' }}>
                                 {romanSem}
@@ -275,8 +292,15 @@ export default function HallTicketModal({ student, students = [], getStudentExam
                               <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontSize: '10.5px' }}>
                                 <strong>{exam.session}</strong> ({exam.session === 'FN' ? '9.30 AM – 12.30 PM' : '1.30 PM – 4.30 PM'})
                               </td>
-                              <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 'bold', color: exam.is_arrear ? '#b45309' : '#047857' }}>
-                                {exam.is_arrear ? 'ARREAR' : 'REGULAR'}
+                              <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 'bold' }}>
+                                {exam.is_arrear ? (
+                                  <span style={{ color: '#b45309', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
+                                    <span>ARREAR</span>
+                                    <span style={{ fontSize: '9px', fontWeight: 'normal', color: '#92400e' }}>(Sem {romanSem})</span>
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#047857' }}>REGULAR</span>
+                                )}
                               </td>
                               <td style={{ border: '1px solid #000', padding: '5px' }}></td>
                             </tr>
@@ -285,6 +309,41 @@ export default function HallTicketModal({ student, students = [], getStudentExam
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Official CoE Examination Terms & Candidate Instructions */}
+                <div style={{
+                  marginBottom: '14px',
+                  border: '1.5px solid #000',
+                  borderRadius: '4px',
+                  padding: '8px 12px',
+                  background: '#fafafa',
+                  fontSize: '9.5px',
+                  lineHeight: '1.4'
+                }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '10.5px', marginBottom: '4px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '2px', color: '#000' }}>
+                    Terms & Examination Instructions to Candidates:
+                  </div>
+                  <ol style={{ margin: 0, paddingLeft: '16px' }}>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Admit Card & Identification:</strong> Candidates must present this official Hall Ticket along with their Institution Identity Card for admission into the examination hall.
+                    </li>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Arrear / Backlog Courses:</strong> All registered arrear course examinations are explicitly listed above with their respective semester terms. Candidates must carefully check course codes, dates, and sessions.
+                    </li>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Hall Reporting Time:</strong> Candidates should be seated in the examination hall 15 minutes before session commencement (FN: 9:15 AM / AN: 1:15 PM). Late entry beyond 30 minutes is strictly prohibited.
+                    </li>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Prohibited Items:</strong> Mobile phones, smartwatches, digital devices, programmable calculators, and unauthorized written materials are strictly banned inside the examination hall.
+                    </li>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Invigilator Signature:</strong> Candidate must ensure the Room Invigilator signs the Hall Ticket against each listed course on the date of examination.
+                    </li>
+                    <li style={{ marginBottom: '2px' }}>
+                      <strong>Disciplinary Action:</strong> Any candidate violating Autonomous CoE Examination Regulations or indulging in malpractice will be subject to strict disciplinary proceedings.
+                    </li>
+                  </ol>
                 </div>
 
                 {/* Footer Signatures */}

@@ -142,11 +142,16 @@ def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int
     code = str(course_code).upper().strip()
 
     # 1. Specific Known Course Overrides
-    if code in ["U23MA209", "U23MA210", "U23MA282"]:
+    if code in ["U23MA209", "U23MA210", "U23MA282", "U23OME04", "U23OME06", "U23OCS86"]:
         return 4
+    if code in ["U23MA204", "U23OAD81"]:
+        return 3
+
+    # Strip regulation prefix if present at start (e.g. U23, U22, U24, 19, 20, 21, 22, 23)
+    code_no_reg = re.sub(r'^(U23|U22|U24|19|20|21|22|23)', '', code)
 
     # 2. Match 3-digit subject number (e.g. U23CS591 -> 5, U23EC384 -> 3, U23CB593 -> 5)
-    match = re.search(r'[A-Z]{2,4}(\d{3})', code)
+    match = re.search(r'[A-Z]{2,4}(\d{3})', code_no_reg)
     if match:
         digit3 = match.group(1)
         sem_digit = int(digit3[0])
@@ -155,19 +160,18 @@ def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int
                 return 2
             return sem_digit
 
-    # 3. Open Elective pattern check (e.g., U23OME81, U23OCS85, U23OEC84)
-    if code.startswith("U23O") or code.startswith("19O") or code.startswith("20O"):
-        match_oe = re.search(r'\d{2,3}', code)
-        if match_oe:
-            num_str = match_oe.group(0)
-            if len(num_str) == 3 and num_str[0] in '12345678':
-                return int(num_str[0])
-            elif len(num_str) == 2:
-                if num_str[0] in '5678':
-                    return 5
-                elif num_str[0] in '34':
-                    return 3
-        return fallback_sem if fallback_sem else 5
+    # 3. Open Elective / Elective pattern check (e.g., OME81, OCS85, OEC84, OAD81, OCS82, OME06)
+    match_oe = re.search(r'[A-Z]{2,4}(\d{2,3})', code_no_reg)
+    if match_oe:
+        digits = match_oe.group(1)
+        if len(digits) == 3 and digits[0] in '12345678':
+            return int(digits[0])
+        elif len(digits) == 2:
+            d0 = digits[0]
+            if d0 in '345678':
+                return int(d0)
+            elif d0 in '012':
+                return fallback_sem if fallback_sem and fallback_sem != 1 else 4
 
     # 4. Fallback pattern match
     match2 = re.search(r'^[U\d]{0,3}[A-Z]{2,4}(\d)', code)
@@ -179,23 +183,45 @@ def extract_sem_from_course_code(course_code: str, fallback_sem: int = 1) -> int
     return fallback_sem if fallback_sem else 1
 
 
-def _parse_reg_no_info(reg_no: str) -> dict:
-    """Parse batch, department, and regular semester from a 12-digit register number."""
-    if not reg_no or len(reg_no) != 12 or not reg_no.isdigit():
-        return {"batch": "26", "branch": "GENERAL", "regular_sem": 1}
-    batch = reg_no[4:6]
-    dept_code = reg_no[6:9]
-    branch = REG_DEPT_MAP.get(dept_code, "GENERAL")
-    batch_sem_map = {"26": 1, "25": 3, "24": 5, "23": 7}
-    regular_sem = batch_sem_map.get(batch, 1)
+def _parse_reg_no_info(reg_no: str, sem_type: str = "odd", fallback_sem: int = 1) -> dict:
+    """
+    Parse batch, department, and regular semester from a 12-digit register number
+    or roll number (e.g. 722825104001, 25CS001, 24EE012).
+    Supports both 'odd' and 'even' semester maps.
+    """
+    if not reg_no:
+        return {"batch": "26", "branch": "GENERAL", "regular_sem": fallback_sem if fallback_sem else 1}
+
+    reg_str = str(reg_no).strip().upper()
+    batch = None
+    branch = "GENERAL"
+
+    # Case 1: 12-digit Anna University Register Number (e.g. 722825104001)
+    if len(reg_str) == 12 and reg_str.isdigit():
+        batch = reg_str[4:6]
+        dept_code = reg_str[6:9]
+        branch = REG_DEPT_MAP.get(dept_code, "GENERAL")
+    # Case 2: Roll number starting with 2-digit batch (e.g. 25CS001, 24EE012, 23AD005)
+    elif ROLL_NO_PATTERN.match(reg_str) or (len(reg_str) >= 4 and reg_str[:2].isdigit()):
+        batch = reg_str[:2]
+
+    is_even = str(sem_type).lower() == "even"
+    batch_sem_map = {
+        "26": 2 if is_even else 1,
+        "25": 4 if is_even else 3,
+        "24": 6 if is_even else 5,
+        "23": 8 if is_even else 7,
+    }
+    regular_sem = batch_sem_map.get(batch, fallback_sem if fallback_sem else (2 if is_even else 1))
+
     return {
-        "batch": batch,
+        "batch": batch or "26",
         "branch": branch,
         "regular_sem": regular_sem
     }
 
 
-def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool = False) -> list:
+def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool = False, sem_type: str = "odd") -> list:
     """
     Parses all worksheets in an Excel .xlsx file using pure python zipfile.
     Returns list of dicts: [ {reg_no, roll_no, name, branch, course_code, semester, year, is_arrear}, ... ]
@@ -256,6 +282,12 @@ def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool
                     name = None
                     row_sem = default_sem
 
+                    # Extract explicit semester digit if present in row cells (e.g. '1', '2', '3', '4', '5', '6', '7', '8')
+                    for item in raw_clean:
+                        if item.isdigit() and len(item) == 1 and 1 <= int(item) <= 8:
+                            row_sem = int(item)
+                            break
+
                     # 1. Reg No (12 digits)
                     for item in raw_clean:
                         if len(item) == 12 and item.isdigit():
@@ -305,9 +337,13 @@ def parse_xlsx_with_zipfile(filepath: str, default_sem: int = 1, is_arrear: bool
                     primary_id = reg_no if reg_no else roll_no
                     if primary_id and course_code:
                         if is_arrear:
-                            actual_sem = extract_sem_from_course_code(course_code, row_sem)
+                            # Use explicit row_sem from sheet if found, otherwise deduce from course code
+                            if row_sem != default_sem:
+                                actual_sem = row_sem
+                            else:
+                                actual_sem = extract_sem_from_course_code(course_code, row_sem)
                         else:
-                            reg_info = _parse_reg_no_info(primary_id)
+                            reg_info = _parse_reg_no_info(primary_id, sem_type=sem_type, fallback_sem=row_sem)
                             actual_sem = reg_info["regular_sem"] if reg_info and reg_info.get("regular_sem") else row_sem
                         records.append({
                             "name": name or f"Student {primary_id}",
@@ -380,7 +416,7 @@ def load_multi_year_dataset(year_files: dict = None, arrear_file: str = None, se
 
     # 1. Ingest Direct Regular File if passed
     if regular_file:
-        parsed = parse_xlsx_with_zipfile(regular_file, default_sem=1, is_arrear=False)
+        parsed = parse_xlsx_with_zipfile(regular_file, default_sem=1, is_arrear=False, sem_type=sem_type)
         for rec in parsed:
             p_id = rec["reg_no"]
             if p_id not in student_master_db and not rec["name"].startswith("Student "):
@@ -401,7 +437,7 @@ def load_multi_year_dataset(year_files: dict = None, arrear_file: str = None, se
             y_num = int(y_str) if y_str.isdigit() else 1
             target_sem = active_sem_map.get(y_num, y_num * 2 - 1)
             
-            parsed = parse_xlsx_with_zipfile(fpath, default_sem=target_sem, is_arrear=False)
+            parsed = parse_xlsx_with_zipfile(fpath, default_sem=target_sem, is_arrear=False, sem_type=sem_type)
             for rec in parsed:
                 p_id = rec["reg_no"]
                 if p_id not in student_master_db and not rec["name"].startswith("Student "):
@@ -416,7 +452,7 @@ def load_multi_year_dataset(year_files: dict = None, arrear_file: str = None, se
             
     # 3. Ingest & Harmonize Arrear File if present
     if arrear_file:
-        arrear_records = parse_xlsx_with_zipfile(arrear_file, default_sem=1, is_arrear=True)
+        arrear_records = parse_xlsx_with_zipfile(arrear_file, default_sem=1, is_arrear=True, sem_type=sem_type)
         seen_arrears = set()  # (reg_no, course_code) deduplication
         
         for arr in arrear_records:

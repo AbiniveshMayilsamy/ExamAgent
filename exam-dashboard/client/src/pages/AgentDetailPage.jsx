@@ -151,6 +151,16 @@ export default function AgentDetailPage() {
             ← Back
           </button>
           <div>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>
+              <span
+                style={{ cursor: 'pointer', color: '#1d4ed8' }}
+                onClick={() => navigate('/agents')}
+              >
+                Agent Pipeline
+              </span>
+              {' '}›{' '}
+              <span style={{ color: '#0f172a' }}>Agent {agentId} — {meta.name}</span>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 36, height: 36, borderRadius: 10,

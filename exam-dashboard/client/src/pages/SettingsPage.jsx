@@ -48,7 +48,7 @@ export default function SettingsPage() {
           <p style={{ fontSize: 13, marginTop: 2 }}>Configure AI model, system preferences, and defaults</p>
         </div>
         <button className="btn btn-primary" onClick={saveSettings}>
-          {saved ? 'Saved!' : 'Save Settings'}
+          {saved ? '✓ Saved to browser!' : 'Save Settings'}
         </button>
       </div>
 
@@ -98,6 +98,9 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+              ⚠️ Settings are saved to your browser’s localStorage only. The server reads them on the next pipeline run.
+            </div>
 
             {ollamaStatus === 'error' && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
@@ -118,8 +121,8 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
               { label: 'System', value: 'Exam Cell AI Scheduler' },
-              { label: 'Agents', value: '6 AI agents (Calendar, Matcher, Harmonizer, Spacing, Arrear, Validator)' },
-              { label: 'Rules Covered', value: '13 exam scheduling rules' },
+              { label: 'Scheduling Steps', value: '6 deterministic steps (Calendar → Matcher → Harmonizer → Spacing → Arrears → Validator)' },
+              { label: 'Rules Covered', value: '9 scheduling rules (hard + soft constraints)' },
               { label: 'Backend', value: 'Node.js + Python + MongoDB + Socket.io' },
               { label: 'AI Engine', value: 'Ollama (local LLM — no data leaves your server)' },
               { label: 'Data Privacy', value: 'All student data stays on your local machine' },
@@ -137,19 +140,15 @@ export default function SettingsPage() {
           <h3 style={{ marginBottom: 12 }}>Scheduling Rules Reference</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {[
-              [1,  'Minimum 1-day gap between regular exams (Mon → Wed pattern)'],
-              [2,  'Arrear exams: 2 per day, consecutive days, no gap required'],
-              [3,  'Schedule window: Nov–Dec (odd sem), Apr–May (even sem)'],
-              [4,  'Exam timings: FN = 9:30–12:30, AN = 1:30–4:30'],
-              [5,  'Government holidays are excluded from the exam calendar'],
-              [6,  'Each agent shows statistics and function type'],
-              [7,  'Schedule output is dept-wise with roll number ranges'],
-              [8,  'Number of exams per branch is configurable'],
-              [9,  'Credit-based exams: 4+ credits treated as hard (extra gap)'],
-              [10, 'Year-wise session pattern is configurable per exam cycle'],
-              [11, 'Common exams across branches scheduled in same session'],
-              [12, 'Human intervention: review/modify each agent output before next runs'],
-              [13, 'Arrear exams also follow the year-wise session pattern'],
+              [1,  'Maximum 2 exam sessions per day — FN (9:30–12:30) and AN (1:30–4:30)'],
+              [2,  'One student can write at most 1 exam per session (no double-booking)'],
+              [3,  'Courses common to students of multiple branches must be examined in the same session'],
+              [4,  'Regular courses of a semester should, as far as possible, be in the same session across all branches'],
+              [5,  'A course studied by two different branches in odd and even semesters respectively must be scheduled in the same session'],
+              [6,  'Minimum one-day gap between two successive regular exams for the same branch/semester'],
+              [7,  'Arrear course exams can be scheduled in the other session of a regular exam day, if necessary'],
+              [8,  'Leave days (government holidays, Sundays) are excluded from the exam calendar'],
+              [9,  'If there is a 2-day gap between regular exams, a hard/high-credit course can be placed after the 2-day leave'],
             ].map(([num, text]) => (
               <div key={num} style={{ display: 'flex', gap: 10, padding: '8px 10px', background: '#f8fafc', borderRadius: 6 }}>
                 <span style={{ background: '#1d4ed8', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap', alignSelf: 'flex-start', marginTop: 1 }}>

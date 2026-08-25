@@ -4,10 +4,16 @@ import { io } from 'socket.io-client'
 const SocketContext = createContext(null)
 
 const getSocketUrl = () => {
-  const rawUrl = process.env.REACT_APP_SOCKET_URL || 
-    process.env.REACT_APP_API_URL || 
-    'http://localhost:5000'
+  const isLocalhost = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   
+  const envUrl = process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_API_URL
+
+  if (isLocalhost && (!envUrl || envUrl.includes('vercel.app'))) {
+    return 'http://localhost:5000'
+  }
+
+  const rawUrl = envUrl || 'http://localhost:5000'
   return rawUrl.replace(/\/$/, '')
 }
 

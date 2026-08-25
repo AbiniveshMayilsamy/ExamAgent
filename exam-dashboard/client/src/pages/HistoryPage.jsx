@@ -56,6 +56,12 @@ export default function HistoryPage() {
               {runs.map(run => {
                 const cfg = STATUS_CONFIG[run.status] || STATUS_CONFIG.failed
                 const isSelected = selected?._id === run._id
+                // Build a human-readable run label from semType + startDate
+                const semLabel = run.semType === 'even' ? 'Even Sem' : 'Odd Sem'
+                const dateLabel = run.startDate
+                  ? (() => { const d = new Date(run.startDate); return isNaN(d) ? run.startDate : d.toLocaleString('en-IN', { month: 'short', year: 'numeric' }) })()
+                  : null
+                const runLabel = dateLabel ? `${semLabel} — ${dateLabel}` : semLabel
                 return (
                   <div key={run._id} onClick={() => loadRun(run._id)} style={{
                     background: '#fff', border: `1.5px solid ${isSelected ? '#1d4ed8' : '#e2e8f0'}`,
@@ -63,12 +69,17 @@ export default function HistoryPage() {
                     transition: 'all 0.15s',
                     boxShadow: isSelected ? '0 0 0 3px #dbeafe' : 'none',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
-                        {run.inputFile || 'Unknown file'}
+                        {runLabel}
                       </span>
                       <span className={`badge ${cfg.cls}`}>{cfg.label}</span>
                     </div>
+                    {run.inputFile && (
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+                        {run.inputFile}
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
                       {new Date(run.startedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </div>

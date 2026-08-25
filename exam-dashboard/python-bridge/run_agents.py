@@ -25,7 +25,7 @@ from agent5_spacing import apply_spacing_rules
 from agent6_arrear import schedule_arrears
 from agent7_resolver import resolve_cumulative_conflicts
 from groq_service import assess_course_difficulties, generate_schedule_summary
-from config import ScheduleConfig
+from config import ScheduleConfig, get_semester_session_cycle, sem_to_year
 
 
 def emit(data):
@@ -90,6 +90,13 @@ def main():
     enrolments = load_multi_year_dataset(year_files=year_files, arrear_file=args.arrear_file, sem_type=args.sem_type, regular_file=regular_file)
     dept_roll_ranges = build_dept_roll_ranges(enrolments)
 
+    # Derive active semester cycle dynamically from regular enrolments
+    active_sems = sorted(list({e["semester"] for e in enrolments if not e.get("is_arrear") and "semester" in e}))
+    if active_sems:
+        sem_cycle = [{"semester": s, "year_label": str(sem_to_year(s))} for s in active_sems]
+    else:
+        sem_cycle = get_semester_session_cycle(args.sem_type)
+
     # Agent 1: Calendar Builder
     emit({
         "event": "agent_start",
@@ -103,7 +110,7 @@ def main():
     reg_count = len({e["course_code"] for e in enrolments if not e.get("is_arrear")})
     est_days = max(18, (reg_count // 3) + 10)
     
-    slots1, stats1 = build_calendar(start_date, leave_days=leave_days, estimated_days=est_days, pattern_type=pattern_type)
+    slots1, stats1 = build_calendar(start_date, leave_days=leave_days, estimated_days=est_days, pattern_type=pattern_type, semester_cycle=sem_cycle)
     agent_stats[1] = stats1
     emit({"event": "agent_log", "agentId": 1, "message": f"Generated {len(slots1)} available session slots through {stats1['end_date']} (Pattern: {pattern_type})."})
     emit({"event": "agent_done", "agentId": 1, "summary": f"Built {len(slots1)} slots across {stats1['total_days']} exam days.", "stats": stats1})
@@ -138,7 +145,7 @@ def main():
         "rules": f"Rule 4 — regular course slot assignment (Pattern: {pattern_type})"
     })
     reg_clusters = [c for c in clusters if not c.get("is_arrear")]
-    schedule_config = ScheduleConfig(pattern_type=pattern_type)
+    schedule_config = ScheduleConfig(pattern_type=pattern_type, semester_cycle=sem_cycle)
     agent4_result = assign_regular_slots(slots1, reg_clusters, schedule_config)
     spaced  = agent4_result["draft_schedule"]
     sweep   = agent4_result["arrear_sweep_slots"]

@@ -2,14 +2,13 @@ import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
+const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
 const AGENT_META = {
   1: { name: 'Calendar Builder',     short: 'Calendar',  color: '#1d4ed8' },
   3: { name: 'Course Matcher',       short: 'Matcher',   color: '#7c3aed' },
   4: { name: 'Slot Harmonizer',      short: 'Harmonizer',color: '#0891b2' },
   5: { name: 'Gap Enforcer',         short: 'Spacing',   color: '#d97706' },
   6: { name: 'Arrear Packer',        short: 'Arrears',   color: '#059669' },
-  7: { name: 'Conflict Resolver',    short: 'Resolver',  color: '#8b5cf6' },
   2: { name: 'Conflict Checker',     short: 'Validator', color: '#dc2626' },
 }
 
@@ -26,7 +25,7 @@ export default function DashboardPage() {
   const { agents, pipelineStatus, stats, schedule, deptRollRanges } = usePipelineContext()
 
   const doneAgents = agents.filter(a => a.status === 'done').length
-  const progress = Math.round((doneAgents / 7) * 100)
+  const progress = Math.round((doneAgents / AGENT_ORDER.length) * 100)
 
   const branchData = Object.entries(deptRollRanges).map(([branch]) => ({
     branch,
@@ -45,14 +44,6 @@ export default function DashboardPage() {
     <div>
       <div className="page-header">
         <div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-            <button className="badge badge-idle" style={{ cursor: 'pointer', border: 'none' }} onClick={() => navigate('/')}>
-              ← SDI Hero Landing
-            </button>
-            <button className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }}>
-              Operational Dashboard
-            </button>
-          </div>
           <h1>Dashboard</h1>
           <p style={{ fontSize: 13, marginTop: 2 }}>Overview of your exam scheduling pipeline</p>
         </div>
@@ -188,7 +179,31 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {schedule.length > 0 && (
+        {schedule.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '48px 32px', border: '2px dashed #cbd5e1' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
+            <h2 style={{ color: '#0f172a', marginBottom: 8, fontSize: 20 }}>No Timetable Generated Yet</h2>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 28, maxWidth: 460, margin: '0 auto 28px' }}>
+              Upload your student registration files and generate a conflict-free exam timetable in 3 steps.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 32 }}>
+              {[
+                { step: '1', label: 'Upload Files', desc: 'Excel or CSV registration data', icon: '📤' },
+                { step: '2', label: 'Generate', desc: 'Pipeline runs in under 60s', icon: '⚙️' },
+                { step: '3', label: 'Export', desc: 'PDF, Excel, or Hall Tickets', icon: '📥' },
+              ].map(s => (
+                <div key={s.step} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#eff6ff', border: '2px solid #93c5fd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{s.icon}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af' }}>{s.label}</div>
+                  <div style={{ fontSize: 11, color: '#64748b', textAlign: 'center', maxWidth: 90 }}>{s.desc}</div>
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-primary" style={{ padding: '12px 28px', fontSize: 15 }} onClick={() => navigate('/schedule')}>
+              🚀 Generate First Timetable
+            </button>
+          </div>
+        ) : (
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <h3>Latest Schedule Preview</h3>

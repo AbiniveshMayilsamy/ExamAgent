@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSocket } from '../context/SocketContext'
 import axios from 'axios'
 
-const AGENT_ORDER = [1, 3, 4, 5, 6, 7, 2]
+const AGENT_ORDER = [1, 3, 4, 5, 6, 2]
 
 const AGENT_META = {
   1: { name: 'Calendar & Session Manager',    rules: 'Rules 1,8', icon: '📅', functionType: 'Calendar Builder' },
@@ -11,7 +11,6 @@ const AGENT_META = {
   4: { name: 'Regular Stream Harmonizer',     rules: 'Rule 4',    icon: '📐', functionType: 'Slot Harmonizer' },
   5: { name: 'Spacing & Difficulty Evaluator',rules: 'Rules 6,9', icon: '⏱️', functionType: 'Gap & Difficulty Enforcer' },
   6: { name: 'Arrear & Backlog Scheduler',    rules: 'Rule 7',   icon: '📋', functionType: 'Arrear Packer' },
-  7: { name: 'Cumulative Conflict Resolver', rules: 'Rule 2,7',  icon: '🔧', functionType: 'Conflict Resolution Expert' },
 }
 
 function initAgents() {

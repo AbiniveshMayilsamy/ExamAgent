@@ -2,6 +2,18 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePipelineContext } from '../context/PipelineContext'
 
+function getDefaultStartDate(semType) {
+  const now = new Date()
+  const year = now.getFullYear()
+  if (semType === 'odd') {
+    const novThisYear = new Date(year, 9, 1) // Oct 1 — if past Oct, use next year Nov
+    return now > novThisYear ? `${year + 1}-11-02` : `${year}-11-02`
+  } else {
+    const aprThisYear = new Date(year, 3, 1) // Apr 1
+    return now > aprThisYear ? `${year + 1}-04-20` : `${year}-04-20`
+  }
+}
+
 export default function SchedulePage() {
   const navigate = useNavigate()
   const { trigger } = usePipelineContext()
@@ -13,27 +25,29 @@ export default function SchedulePage() {
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
   const [patternType, setPatternType] = useState('alternating') // 'alternating' | 'semester_wise'
 
-  // Files & Start Dates (Odd sem -> 2026-11-02 Nov/Dec, Even sem -> 2026-04-20 Apr/May)
+  const defaultOddDate = getDefaultStartDate('odd')
+  const defaultEvenDate = getDefaultStartDate('even')
+
   const [masterFile, setMasterFile] = useState(null)
   const [regularFile, setRegularFile] = useState(null)
   const [arrearFile, setArrearFile] = useState(null)
-  const [startDate, setStartDate] = useState('2026-11-02')
+  const [startDate, setStartDate] = useState(defaultOddDate)
 
   // Split Year Files & Start Dates
   const [files, setFiles] = useState({ 1: null, 2: null, 3: null, 4: null })
   const [startDates, setStartDates] = useState({
-    1: '2026-11-02',
-    2: '2026-11-02',
-    3: '2026-11-02',
-    4: '2026-11-02',
+    1: defaultOddDate,
+    2: defaultOddDate,
+    3: defaultOddDate,
+    4: defaultOddDate,
   })
 
   // Holidays
   const [holidayInput, setHolidayInput] = useState('')
-  const [holidays, setHolidays] = useState(['2026-11-10', '2026-11-15'])
+  const [holidays, setHolidays] = useState([])
 
   // Options
-  const [useGroqAI, setUseGroqAI] = useState(true)
+  const [useGroqAI, setUseGroqAI] = useState(false)
   const [humanIntervention, setHumanIntervention] = useState(false)
 
   const yearSemLabels = {
@@ -43,7 +57,7 @@ export default function SchedulePage() {
 
   const handleSemTypeChange = (newSemType) => {
     setSemType(newSemType)
-    const defaultDate = newSemType === 'odd' ? '2026-11-02' : '2026-04-20'
+    const defaultDate = getDefaultStartDate(newSemType)
     setStartDate(defaultDate)
     setStartDates({ 1: defaultDate, 2: defaultDate, 3: defaultDate, 4: defaultDate })
   }
@@ -149,25 +163,28 @@ export default function SchedulePage() {
               type="button"
               className={`btn ${inputMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('single')}
-              style={{ fontWeight: 700 }}
+              style={{ fontWeight: 700, textAlign: 'left' }}
             >
-              ⚡ Single File Mode (1 File Upload)
+              <div>⚡ Single File Mode</div>
+              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One master Excel with all students</div>
             </button>
             <button
               type="button"
               className={`btn ${inputMode === '2file' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('2file')}
-              style={{ fontWeight: 700 }}
+              style={{ fontWeight: 700, textAlign: 'left' }}
             >
-              📁 2-File Mode (Regular + Arrear)
+              <div>📁 2-File Mode</div>
+              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>Separate Regular + Arrear files</div>
             </button>
             <button
               type="button"
               className={`btn ${inputMode === 'split' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('split')}
-              style={{ fontWeight: 700 }}
+              style={{ fontWeight: 700, textAlign: 'left' }}
             >
-              🗂️ Year-wise Split Files
+              <div>🗂️ Year-wise Split Files</div>
+              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One file per year group (I–IV year)</div>
             </button>
           </div>
 
@@ -201,7 +218,7 @@ export default function SchedulePage() {
 
           {/* 2. Schedule Pattern Toggle Switch */}
           <div className="card" style={{ borderLeft: '4px solid #3b82f6' }}>
-            <h3 style={{ marginBottom: 6, color: '#1d4ed8' }}>2. Select Schedule Pattern Type</h3>
+            <h3 style={{ marginBottom: 6, color: '#1d4ed8' }}>2. Select Schedule Pattern</h3>
             <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
               Choose how regular semester exams and arrear sessions rotate across calendar days.
             </p>
@@ -244,10 +261,10 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          {/* 2. File Upload Cards depending on mode */}
+          {/* 3. File Upload Cards depending on mode */}
           {inputMode === 'single' ? (
             <div className="card" style={{ borderLeft: '4px solid #10b981' }}>
-              <h3 style={{ marginBottom: 6, color: '#047857' }}>2. Master Registration File (1 File Mode)</h3>
+              <h3 style={{ marginBottom: 6, color: '#047857' }}>3. Upload Registration File</h3>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 Upload your single master registration file containing all student-course registrations (e.g. <code>Regular_All Courses.xlsx</code>).
               </p>
@@ -285,7 +302,7 @@ export default function SchedulePage() {
             </div>
           ) : inputMode === '2file' ? (
             <div className="card">
-              <h3 style={{ marginBottom: 6 }}>2. Regular & Arrear Input Files</h3>
+              <h3 style={{ marginBottom: 6 }}>3. Regular & Arrear Input Files</h3>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 Upload the Regular Courses File and optional Arrear Exam Details file.
               </p>
@@ -332,7 +349,7 @@ export default function SchedulePage() {
             </div>
           ) : (
             <div className="card">
-              <h3 style={{ marginBottom: 6 }}>2. Regular Stream Files & Exam Start Dates</h3>
+              <h3 style={{ marginBottom: 6 }}>3. Regular Stream Files & Exam Start Dates</h3>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 Upload Excel files for each year group and set the start date for their exams.
               </p>
@@ -379,12 +396,30 @@ export default function SchedulePage() {
                   </div>
                 ))}
               </div>
+
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed #cbd5e1' }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                  🚨 Arrear Exam Details File (Optional - e.g. Arrear Details_AM2026.xlsx):
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="form-control"
+                  style={{ maxWidth: 450 }}
+                  onChange={e => setArrearFile(e.target.files[0])}
+                />
+                {arrearFile && (
+                  <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                    ✓ Arrear File Attached: {arrearFile.name}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* 3. Holidays & Excluded Dates */}
+          {/* 4. Holidays & Excluded Dates */}
           <div className="card">
-            <h3 style={{ marginBottom: 6 }}>3. Government Holidays & Excluded Dates</h3>
+            <h3 style={{ marginBottom: 6 }}>4. Government Holidays & Excluded Dates</h3>
             <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
               Dates where no exams should be scheduled (e.g. Deepavali, Sundays, National Holidays).
             </p>
@@ -418,6 +453,56 @@ export default function SchedulePage() {
             </div>
           </div>
 
+          {/* 5. Advanced Options */}
+          <div className="card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+            <h3 style={{ marginBottom: 6, color: '#6d28d9' }}>5. Advanced Options</h3>
+            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+              Optional AI features. These do not affect scheduling accuracy — only the audit summary and Ollama integration.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                <div
+                  onClick={() => setUseGroqAI(v => !v)}
+                  style={{
+                    width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                    background: useGroqAI ? '#7c3aed' : '#cbd5e1',
+                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 3, left: useGroqAI ? 22 : 3,
+                    width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>🧠 Use Groq AI for Course Difficulty</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>Calls Groq API to assess course difficulty. Falls back to rule-based heuristic if unavailable.</div>
+                </div>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                <div
+                  onClick={() => setHumanIntervention(v => !v)}
+                  style={{
+                    width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                    background: humanIntervention ? '#d97706' : '#cbd5e1',
+                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 3, left: humanIntervention ? 22 : 3,
+                    width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>👁️ Pause for Human Review Between Steps</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>Pipeline pauses after each step so you can inspect and approve before the next agent runs.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
           {/* Submit */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
             <button
@@ -426,7 +511,7 @@ export default function SchedulePage() {
               disabled={submitting}
               style={{ padding: '12px 28px', fontSize: 15, fontWeight: 700 }}
             >
-              {submitting ? 'Initializing Multi-Agent System...' : '🚀 Launch Multi-Agent Scheduling Pipeline'}
+              {submitting ? 'Initializing Pipeline...' : '🚀 Generate Exam Timetable'}
             </button>
           </div>
         </form>

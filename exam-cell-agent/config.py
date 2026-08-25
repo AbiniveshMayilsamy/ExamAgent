@@ -30,6 +30,22 @@ SEMESTER_SESSION_CYCLE = [
     {"semester": 7, "year_label": "IV"},
 ]
 
+
+def get_semester_session_cycle(sem_type: str = "odd") -> list:
+    """Return active semester session cycle steps for odd (3,5,7) or even (2,4,6,8) semesters."""
+    if str(sem_type).lower() == "even":
+        return [
+            {"semester": 2, "year_label": "I"},
+            {"semester": 4, "year_label": "II"},
+            {"semester": 6, "year_label": "III"},
+            {"semester": 8, "year_label": "IV"},
+        ]
+    return [
+        {"semester": 3, "year_label": "II"},
+        {"semester": 5, "year_label": "III"},
+        {"semester": 7, "year_label": "IV"},
+    ]
+
 # ---------------------------------------------------------------------------
 # 2. Arrear sweep — dedicated session after each full cycle
 # ---------------------------------------------------------------------------

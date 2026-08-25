@@ -72,12 +72,14 @@ p  { color: #475569; line-height: 1.6; }
   box-sizing: border-box;
 }
 
-/* ── Cards ────────────────────────────────────────────────────────────────── */
+/* ── Cards & Grids ────────────────────────────────────────────────────────── */
 .card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   padding: 20px 24px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .card-sm {
@@ -85,6 +87,51 @@ p  { color: #475569; line-height: 1.6; }
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   padding: 16px 18px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.grid-2, .dashboard-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stat-tile {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 4px;
+}
+
+.stat-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
@@ -751,6 +798,16 @@ p  { color: #475569; line-height: 1.6; }
   .btn {
     padding: 8px 12px !important;
     font-size: 12px !important;
+  }
+
+  .responsive-flex-wrap {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  .responsive-flex-wrap > * {
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 }
 

@@ -212,7 +212,7 @@ export default function AgentPipelinePage() {
         </div>
 
         {/* Detailed Agent Interactive Stats & Charts Cards Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, width: '100%', boxSizing: 'border-box' }}>
           {AGENT_ORDER.map(id => {
             const agent = agents.find(a => a.agentId === id)
             const meta = AGENT_DETAIL[id]

@@ -159,12 +159,12 @@ export default function SchedulePage() {
           {error && <div className="alert alert-error">{error}</div>}
 
           {/* Mode Selector */}
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', width: '100%' }}>
             <button
               type="button"
               className={`btn ${inputMode === '2file' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('2file')}
-              style={{ fontWeight: 700, textAlign: 'left' }}
+              style={{ fontWeight: 700, textAlign: 'left', flex: '1 1 200px' }}
             >
               <div>📁 2-File Mode</div>
               <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>Separate Regular + Arrear files</div>
@@ -173,7 +173,7 @@ export default function SchedulePage() {
               type="button"
               className={`btn ${inputMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('single')}
-              style={{ fontWeight: 700, textAlign: 'left' }}
+              style={{ fontWeight: 700, textAlign: 'left', flex: '1 1 200px' }}
             >
               <div>⚡ Single File Mode</div>
               <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One master Excel with all students</div>
@@ -182,7 +182,7 @@ export default function SchedulePage() {
               type="button"
               className={`btn ${inputMode === 'split' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('split')}
-              style={{ fontWeight: 700, textAlign: 'left' }}
+              style={{ fontWeight: 700, textAlign: 'left', flex: '1 1 200px' }}
             >
               <div>🗂️ Year-wise Split Files</div>
               <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One file per year group (I–IV year)</div>
@@ -192,8 +192,8 @@ export default function SchedulePage() {
           {/* 1. Exam Season / Semester Type */}
           <div className="card">
             <h3 style={{ marginBottom: 12 }}>1. Select Examination Season</h3>
-            <div style={{ display: 'flex', gap: 20 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', width: '100%' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, flex: '1 1 240px' }}>
                 <input
                   type="radio"
                   name="semType"
@@ -204,7 +204,7 @@ export default function SchedulePage() {
                 <span>Odd Semesters (Nov / Dec 2026 — Semesters 1, 3, 5, 7)</span>
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, flex: '1 1 240px' }}>
                 <input
                   type="radio"
                   name="semType"
@@ -223,12 +223,12 @@ export default function SchedulePage() {
             <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
               Choose how regular semester exams and arrear sessions rotate across calendar days.
             </p>
-            <div style={{ display: 'flex', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', width: '100%' }}>
               <button
                 type="button"
                 onClick={() => setPatternType('alternating')}
                 style={{
-                  flex: 1, padding: '12px 16px', borderRadius: 8, textAlign: 'left',
+                  flex: '1 1 240px', padding: '12px 16px', borderRadius: 8, textAlign: 'left',
                   border: patternType === 'alternating' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                   background: patternType === 'alternating' ? '#eff6ff' : '#f8fafc',
                   color: patternType === 'alternating' ? '#1e3a8a' : '#475569', cursor: 'pointer'
@@ -246,7 +246,7 @@ export default function SchedulePage() {
                 type="button"
                 onClick={() => setPatternType('semester_wise')}
                 style={{
-                  flex: 1, padding: '12px 16px', borderRadius: 8, textAlign: 'left',
+                  flex: '1 1 240px', padding: '12px 16px', borderRadius: 8, textAlign: 'left',
                   border: patternType === 'semester_wise' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
                   background: patternType === 'semester_wise' ? '#f5f3ff' : '#f8fafc',
                   color: patternType === 'semester_wise' ? '#4c1d95' : '#475569', cursor: 'pointer'

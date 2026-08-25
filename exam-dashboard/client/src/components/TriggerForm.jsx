@@ -106,12 +106,12 @@ export default function TriggerForm({ onTrigger, disabled }) {
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Input Mode Selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 4, flexWrap: 'wrap', width: '100%' }}>
         <button
           type="button"
           onClick={() => setInputMode('2file')}
           style={{
-            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            flex: '1 1 150px', padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
             background: inputMode === '2file' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#1e293b',
             color: inputMode === '2file' ? '#fff' : '#94a3b8'
           }}
@@ -122,7 +122,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
           type="button"
           onClick={() => setInputMode('single')}
           style={{
-            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            flex: '1 1 150px', padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
             background: inputMode === 'single' ? 'linear-gradient(135deg, #10b981, #059669)' : '#1e293b',
             color: inputMode === 'single' ? '#fff' : '#94a3b8'
           }}
@@ -133,7 +133,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
           type="button"
           onClick={() => setInputMode('split')}
           style={{
-            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            flex: '1 1 150px', padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
             background: inputMode === 'split' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#1e293b',
             color: inputMode === 'split' ? '#fff' : '#94a3b8'
           }}
@@ -143,14 +143,14 @@ export default function TriggerForm({ onTrigger, disabled }) {
       </div>
 
       {/* Schedule Pattern Toggle Switch */}
-      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #3b82f6' }}>
+      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #3b82f6', width: '100%', boxSizing: 'border-box' }}>
         <label style={{ ...lbl, color: '#60a5fa', fontWeight: 700, fontSize: 13 }}>🔀 Schedule Pattern Type</label>
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', width: '100%' }}>
           <button
             type="button"
             onClick={() => setPatternType('alternating')}
             style={{
-              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
+              flex: '1 1 200px', padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
               border: patternType === 'alternating' ? '2px solid #3b82f6' : '1px solid #334155',
               background: patternType === 'alternating' ? '#1e293b' : '#090d16',
               color: patternType === 'alternating' ? '#f8fafc' : '#94a3b8', cursor: 'pointer'
@@ -168,7 +168,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
             type="button"
             onClick={() => setPatternType('semester_wise')}
             style={{
-              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
+              flex: '1 1 200px', padding: '10px 12px', borderRadius: 8, fontSize: 12, textAlign: 'left',
               border: patternType === 'semester_wise' ? '2px solid #8b5cf6' : '1px solid #334155',
               background: patternType === 'semester_wise' ? '#2e1065' : '#090d16',
               color: patternType === 'semester_wise' ? '#f8fafc' : '#94a3b8', cursor: 'pointer'
@@ -185,9 +185,9 @@ export default function TriggerForm({ onTrigger, disabled }) {
       </div>
 
       {/* Semester Type Selector */}
-      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+      <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #334155', width: '100%', boxSizing: 'border-box' }}>
         <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600, fontSize: 13 }}>Semester Type</label>
-        <div style={{ display: 'flex', gap: 20, marginTop: 6 }}>
+        <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap', width: '100%' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f8fafc', cursor: 'pointer', fontSize: 13 }}>
             <input type="radio" name="semType" value="odd" checked={semType === 'odd'} onChange={() => handleSemTypeChange('odd')} style={{ accentColor: '#3b82f6' }} />
             Odd Semesters (Nov / Dec 2026 — Sem 1, 3, 5, 7)

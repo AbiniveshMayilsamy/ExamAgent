@@ -363,12 +363,12 @@ export default function TimetablePage() {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', width: '100%' }}>
               <button
                 type="button"
                 onClick={() => setPatternType('alternating')}
                 style={{
-                  padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flex: '1 1 auto',
                   background: patternType === 'alternating' ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : '#0f172a',
                   color: patternType === 'alternating' ? '#ffffff' : '#94a3b8',
                   border: patternType === 'alternating' ? '2px solid #60a5fa' : '1px solid #334155',
@@ -382,7 +382,7 @@ export default function TimetablePage() {
                 type="button"
                 onClick={() => setPatternType('semester_wise')}
                 style={{
-                  padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flex: '1 1 auto',
                   background: patternType === 'semester_wise' ? 'linear-gradient(135deg, #7c3aed, #8b5cf6)' : '#0f172a',
                   color: patternType === 'semester_wise' ? '#ffffff' : '#94a3b8',
                   border: patternType === 'semester_wise' ? '2px solid #c084fc' : '1px solid #334155',
@@ -395,14 +395,14 @@ export default function TimetablePage() {
             </div>
           </div>
 
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap', width: '100%' }}>
             <span style={{ color: '#94a3b8', fontWeight: 600 }}>Active Layout Mode:</span>
             {patternType === 'semester_wise' ? (
-              <span style={{ background: '#4c1d95', color: '#e9d5ff', padding: '3px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #8b5cf6' }}>
+              <span style={{ background: '#4c1d95', color: '#e9d5ff', padding: '4px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #8b5cf6', display: 'inline-block', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.4 }}>
                 📅 Semester-Dedicated Daily Layout (Day 1: Sem 3 FN+AN | Day 2: Sem 5 FN+AN | Day 3: Sem 7 FN+AN)
               </span>
             ) : (
-              <span style={{ background: '#1e3a8a', color: '#bfdbfe', padding: '3px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #3b82f6' }}>
+              <span style={{ background: '#1e3a8a', color: '#bfdbfe', padding: '4px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #3b82f6', display: 'inline-block', maxWidth: '100%', whiteSpace: 'normal', lineHeight: 1.4 }}>
                 🔄 Alternating Cycle Layout (Day 1 FN: Sem 3, Day 1 AN: Sem 5, Day 2 FN: Sem 7, Day 2 AN: Arrear)
               </span>
             )}
@@ -416,7 +416,7 @@ export default function TimetablePage() {
             {Object.entries(monthlyStats).map(([month, data]) => (
               <div key={month} style={{
                 background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8,
-                padding: '12px 16px', minWidth: 140,
+                padding: '12px 16px', minWidth: 140, flex: '1 1 140px'
               }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{month}</div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
@@ -431,8 +431,8 @@ export default function TimetablePage() {
 
         {/* View Mode & Filter Header */}
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Schedule Visualizer</h3>
               
               {/* Department Filter */}
@@ -450,7 +450,7 @@ export default function TimetablePage() {
             </div>
 
             {/* View Mode Toggle Buttons */}
-            <div style={{ display: 'flex', gap: 6, background: '#f1f5f9', padding: 4, borderRadius: 8 }}>
+            <div style={{ display: 'flex', gap: 6, background: '#f1f5f9', padding: 4, borderRadius: 8, flexWrap: 'wrap', width: '100%' }}>
               {[
                 ['matrix', '📊 Master Matrix View'],
                 ['timeline', '📅 Daily Timeline'],
@@ -460,7 +460,7 @@ export default function TimetablePage() {
                   key={mode}
                   onClick={() => setViewMode(mode)}
                   style={{
-                    padding: '8px 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    padding: '8px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', flex: '1 1 auto',
                     background: viewMode === mode ? '#2563eb' : 'transparent',
                     color: viewMode === mode ? '#ffffff' : '#64748b',
                     fontWeight: 700, fontSize: 12,

@@ -26,56 +26,37 @@ export default function Sidebar({ pipelineStatus, awaitingCount }) {
 
   return (
     <aside className="sidebar">
-      {/* Brand */}
-      <div style={{ padding: '22px 20px 16px', borderBottom: '1.5px solid #e2e8f0' }}>
+      {/* Top Header Row (Brand + Status on Mobile) */}
+      <div className="sidebar-header-row" style={{ padding: '16px 20px 14px', borderBottom: '1.5px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img
             src={logoEshwar}
             alt="Sri Eshwar Logo"
-            style={{ height: 36, maxWidth: 140, objectFit: 'contain' }}
+            style={{ height: 32, maxWidth: 140, objectFit: 'contain' }}
           />
         </div>
-      </div>
-
-      {/* Pipeline status pill */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: '#f8fafc', borderRadius: 8, padding: '8px 12px',
-          border: '1px solid #e2e8f0',
-        }}>
+        <div className="sidebar-status-box-mobile" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '4px 8px', borderRadius: 20, border: '1px solid #e2e8f0' }}>
           <div style={{
-            width: 8, height: 8, borderRadius: '50%',
+            width: 7, height: 7, borderRadius: '50%',
             background: statusDot.color,
             boxShadow: statusDot.pulse ? `0 0 0 0 ${statusDot.color}` : 'none',
             animation: statusDot.pulse ? 'pulse-ring 1.8s infinite' : 'none',
           }} />
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Pipeline</div>
-            <div style={{ fontSize: 10, color: statusDot.color, fontWeight: 600 }}>{statusDot.label}</div>
-          </div>
-          {awaitingCount > 0 && (
-            <div style={{
-              marginLeft: 'auto', background: '#fef3c7', color: '#92400e',
-              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-            }}>
-              {awaitingCount} waiting
-            </div>
-          )}
+          <span style={{ fontSize: 10, fontWeight: 700, color: statusDot.color }}>{statusDot.label}</span>
         </div>
       </div>
 
       {/* Nav links */}
-      <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', padding: '4px 10px 8px' }}>
+      <nav className="sidebar-nav-list" style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="sidebar-nav-title" style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', padding: '4px 10px 8px' }}>
           Navigation
         </div>
         {NAV.map(({ path, label, icon }) => {
           const isActive = location.pathname.startsWith(path)
           return (
             <NavLink key={path} to={path} style={{ textDecoration: 'none' }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
+              <div className="sidebar-nav-item" style={{
+                display: 'flex', alignItems: 'center', gap: 8,
                 padding: '9px 12px', borderRadius: 8,
                 background: isActive ? '#eff6ff' : 'transparent',
                 color: isActive ? '#1d4ed8' : '#475569',
@@ -83,12 +64,13 @@ export default function Sidebar({ pipelineStatus, awaitingCount }) {
                 fontSize: 13,
                 transition: 'all 0.12s',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
-                <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{icon}</span>
-                {label}
+                <span style={{ fontSize: 15, width: 20, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                <span>{label}</span>
                 {path === '/agents' && awaitingCount > 0 && (
                   <span style={{
                     marginLeft: 'auto', background: '#fef3c7', color: '#92400e',
@@ -102,7 +84,7 @@ export default function Sidebar({ pipelineStatus, awaitingCount }) {
       </nav>
 
       {/* Bottom: connection status */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9' }}>
+      <div className="sidebar-footer-row" style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? '#16a34a' : '#dc2626' }} />
           <span style={{ fontSize: 11, color: connected ? '#16a34a' : '#dc2626', fontWeight: 600 }}>

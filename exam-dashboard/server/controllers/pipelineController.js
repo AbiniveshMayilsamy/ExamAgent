@@ -120,14 +120,20 @@ async function triggerPipeline(req, res) {
     }
   })
 
-  py.stderr.on('data', (data) => console.error('[Python stderr]', data.toString()))
+  let stderrBuffer = ''
+  py.stderr.on('data', (data) => {
+    const errStr = data.toString()
+    stderrBuffer += errStr
+    console.error('[Python stderr]', errStr)
+  })
 
   py.on('close', async (code) => {
     activeProcesses.delete(run._id.toString())
     const store = getStore()
     if (code !== 0) {
-      await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date() })
-      emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: `Python exited with code ${code}` })
+      const errMsg = stderrBuffer.trim() || `Python exited with code ${code}`
+      await store.findByIdAndUpdate(run._id, { status: 'failed', finishedAt: new Date(), error: errMsg })
+      emitToRun(req.io, run._id.toString(), 'pipeline_fail', { error: errMsg, code })
     }
     // Clean up temp files
     files.forEach(f => fs.unlink(f.path, () => {}))

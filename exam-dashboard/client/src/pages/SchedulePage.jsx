@@ -21,7 +21,7 @@ export default function SchedulePage() {
   const [submitting, setSubmitting] = useState(false)
 
   // Mode & Semester Type State
-  const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
+  const [inputMode, setInputMode] = useState('2file') // '2file' | 'single' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
   const [patternType, setPatternType] = useState('alternating') // 'alternating' | 'semester_wise'
 
@@ -86,15 +86,15 @@ export default function SchedulePage() {
     setSubmitting(true)
     setError('')
 
-    if (inputMode === 'single') {
-      if (!masterFile) {
-        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
+    if (inputMode === '2file') {
+      if (!regularFile && !arrearFile) {
+        setError('Please upload at least the Regular Courses file or Arrear file.')
         setSubmitting(false)
         return
       }
-    } else if (inputMode === '2file') {
-      if (!regularFile && !arrearFile) {
-        setError('Please upload at least the Regular Courses file or Arrear file.')
+    } else if (inputMode === 'single') {
+      if (!masterFile) {
+        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
         setSubmitting(false)
         return
       }
@@ -116,11 +116,12 @@ export default function SchedulePage() {
       fd.append('humanIntervention', humanIntervention)
       fd.append('yearSessionPattern', JSON.stringify({ 1: 'FN', 2: 'FN', 3: 'FN', 4: 'FN' }))
 
-      if (inputMode === 'single') {
-        fd.append('regular_file', masterFile)
-        fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
-      } else if (inputMode === '2file') {
+      if (inputMode === '2file') {
         if (regularFile) fd.append('regular_file', regularFile)
+        if (arrearFile) fd.append('arrear_file', arrearFile)
+        fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+      } else if (inputMode === 'single') {
+        fd.append('regular_file', masterFile)
         if (arrearFile) fd.append('arrear_file', arrearFile)
         fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
       } else {
@@ -161,21 +162,21 @@ export default function SchedulePage() {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
-              className={`btn ${inputMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setInputMode('single')}
-              style={{ fontWeight: 700, textAlign: 'left' }}
-            >
-              <div>⚡ Single File Mode</div>
-              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One master Excel with all students</div>
-            </button>
-            <button
-              type="button"
               className={`btn ${inputMode === '2file' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setInputMode('2file')}
               style={{ fontWeight: 700, textAlign: 'left' }}
             >
               <div>📁 2-File Mode</div>
               <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>Separate Regular + Arrear files</div>
+            </button>
+            <button
+              type="button"
+              className={`btn ${inputMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setInputMode('single')}
+              style={{ fontWeight: 700, textAlign: 'left' }}
+            >
+              <div>⚡ Single File Mode</div>
+              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>One master Excel with all students</div>
             </button>
             <button
               type="button"
@@ -262,47 +263,9 @@ export default function SchedulePage() {
           </div>
 
           {/* 3. File Upload Cards depending on mode */}
-          {inputMode === 'single' ? (
-            <div className="card" style={{ borderLeft: '4px solid #10b981' }}>
-              <h3 style={{ marginBottom: 6, color: '#047857' }}>3. Upload Registration File</h3>
-              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-                Upload your single master registration file containing all student-course registrations (e.g. <code>Regular_All Courses.xlsx</code>).
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, alignItems: 'center' }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
-                    📗 Master Registration Excel File (.xlsx):
-                  </label>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    className="form-control"
-                    onChange={e => setMasterFile(e.target.files[0])}
-                  />
-                  {masterFile && (
-                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
-                      ✓ Master File Attached: {masterFile.name}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
-                    📅 Exam Start Date:
-                  </label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : inputMode === '2file' ? (
-            <div className="card">
-              <h3 style={{ marginBottom: 6 }}>3. Regular & Arrear Input Files</h3>
+          {inputMode === '2file' ? (
+            <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
+              <h3 style={{ marginBottom: 6, color: '#1d4ed8' }}>3. Regular & Arrear Input Files</h3>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 Upload the Regular Courses File and optional Arrear Exam Details file.
               </p>
@@ -347,11 +310,66 @@ export default function SchedulePage() {
                 />
               </div>
             </div>
-          ) : (
-            <div className="card">
-              <h3 style={{ marginBottom: 6 }}>3. Regular Stream Files & Exam Start Dates</h3>
+          ) : inputMode === 'single' ? (
+            <div className="card" style={{ borderLeft: '4px solid #10b981' }}>
+              <h3 style={{ marginBottom: 6, color: '#047857' }}>3. Upload Registration File</h3>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-                Upload Excel files for each year group and set the start date for their exams.
+                Upload your single master registration file containing all student-course registrations (e.g. <code>Regular_All Courses.xlsx</code>).
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    📗 Master Registration Excel File (.xlsx):
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="form-control"
+                    onChange={e => setMasterFile(e.target.files[0])}
+                  />
+                  {masterFile && (
+                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                      ✓ Master File Attached: {masterFile.name}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                    🚨 Arrear Exam Details File (Optional):
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="form-control"
+                    onChange={e => setArrearFile(e.target.files[0])}
+                  />
+                  {arrearFile && (
+                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                      ✓ Arrear File Attached: {arrearFile.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ maxWidth: 300 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                  📅 Exam Start Date:
+                </label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="card" style={{ borderLeft: '4px solid #7c3aed' }}>
+              <h3 style={{ marginBottom: 6, color: '#6d28d9' }}>3. Regular Stream Files & Exam Start Dates</h3>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+                Upload Excel files for each year group, set their start dates, and attach optional arrear exam registrations.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
@@ -397,19 +415,26 @@ export default function SchedulePage() {
                 ))}
               </div>
 
-              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed #cbd5e1' }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 6 }}>
-                  🚨 Arrear Exam Details File (Optional - e.g. Arrear Details_AM2026.xlsx):
+              {/* Arrear File Input Section for Yearwise Mode */}
+              <div style={{
+                marginTop: 20, paddingTop: 16, borderTop: '2px dashed #cbd5e1',
+                background: '#fff3dc', padding: 16, borderRadius: 10, border: '1px solid #fde68a'
+              }}>
+                <label style={{ fontSize: 13, fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span>🚨 Arrear Exam Registration File (Year-Wise Mode):</span>
                 </label>
+                <p style={{ fontSize: 11, color: '#b45309', marginBottom: 10 }}>
+                  Upload backlog/arrear registrations file for Year-Wise Mode (e.g. <code>Arrear Details_AM2026.xlsx</code>).
+                </p>
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   className="form-control"
-                  style={{ maxWidth: 450 }}
+                  style={{ maxWidth: 500, background: '#fff' }}
                   onChange={e => setArrearFile(e.target.files[0])}
                 />
                 {arrearFile && (
-                  <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                  <div style={{ fontSize: 12, color: '#16a34a', marginTop: 8, fontWeight: 700 }}>
                     ✓ Arrear File Attached: {arrearFile.name}
                   </div>
                 )}

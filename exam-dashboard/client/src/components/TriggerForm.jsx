@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export default function TriggerForm({ onTrigger, disabled }) {
-  const [inputMode, setInputMode] = useState('single') // 'single' | '2file' | 'split'
+  const [inputMode, setInputMode] = useState('2file') // '2file' | 'single' | 'split'
   const [semType, setSemType] = useState('odd') // 'odd' | 'even'
   
   const [patternType, setPatternType] = useState('alternating') // 'alternating' | 'semester_wise'
@@ -40,14 +40,14 @@ export default function TriggerForm({ onTrigger, disabled }) {
     e.preventDefault()
     setError('')
     
-    if (inputMode === 'single') {
-      if (!masterFile) {
-        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
-        return
-      }
-    } else if (inputMode === '2file') {
+    if (inputMode === '2file') {
       if (!regularFile && !arrearFile) {
         setError('Please upload at least the Regular Courses file or Arrear file.')
+        return
+      }
+    } else if (inputMode === 'single') {
+      if (!masterFile) {
+        setError('Please upload your Single Master Registration file (e.g. Regular_All Courses.xlsx).')
         return
       }
     } else {
@@ -67,11 +67,12 @@ export default function TriggerForm({ onTrigger, disabled }) {
     fd.append('useGroqAI', useGroqAI)
     fd.append('humanIntervention', humanIntervention)
 
-    if (inputMode === 'single') {
-      fd.append('regular_file', masterFile)
-      fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
-    } else if (inputMode === '2file') {
+    if (inputMode === '2file') {
       if (regularFile) fd.append('regular_file', regularFile)
+      if (arrearFile) fd.append('arrear_file', arrearFile)
+      fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
+    } else if (inputMode === 'single') {
+      fd.append('regular_file', masterFile)
       if (arrearFile) fd.append('arrear_file', arrearFile)
       fd.append('startDates', JSON.stringify({ 1: startDate, 2: startDate, 3: startDate, 4: startDate }))
     } else {
@@ -108,17 +109,6 @@ export default function TriggerForm({ onTrigger, disabled }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
         <button
           type="button"
-          onClick={() => setInputMode('single')}
-          style={{
-            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
-            background: inputMode === 'single' ? 'linear-gradient(135deg, #10b981, #059669)' : '#1e293b',
-            color: inputMode === 'single' ? '#fff' : '#94a3b8'
-          }}
-        >
-          ⚡ Single File Mode (1 File)
-        </button>
-        <button
-          type="button"
           onClick={() => setInputMode('2file')}
           style={{
             flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
@@ -127,6 +117,17 @@ export default function TriggerForm({ onTrigger, disabled }) {
           }}
         >
           📁 2-File Mode (Regular + Arrear)
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputMode('single')}
+          style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+            background: inputMode === 'single' ? 'linear-gradient(135deg, #10b981, #059669)' : '#1e293b',
+            color: inputMode === 'single' ? '#fff' : '#94a3b8'
+          }}
+        >
+          ⚡ Single File Mode (1 File)
         </button>
         <button
           type="button"
@@ -199,19 +200,7 @@ export default function TriggerForm({ onTrigger, disabled }) {
       </div>
 
       {/* Upload Inputs depending on mode */}
-      {inputMode === 'single' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ background: '#1e293b', padding: 14, borderRadius: 8, border: '1px solid #10b981' }}>
-            <label style={{ ...lbl, color: '#34d399', fontWeight: 700, fontSize: 13 }}>📗 Master Registration Excel File (e.g. Regular_All Courses.xlsx)</label>
-            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setMasterFile(e.target.files[0])} style={{ ...inp, padding: '6px' }} />
-          </div>
-
-          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
-            <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600 }}>📅 Exam Window Start Date</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} />
-          </div>
-        </div>
-      ) : inputMode === '2file' ? (
+      {inputMode === '2file' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
             <label style={{ ...lbl, color: '#60a5fa', fontWeight: 600 }}>📗 Regular Courses File (e.g. Regular_All Courses.xlsx)</label>
@@ -220,6 +209,23 @@ export default function TriggerForm({ onTrigger, disabled }) {
 
           <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
             <label style={{ ...lbl, color: '#f87171', fontWeight: 600 }}>🚨 Arrear Exam File (e.g. Arrear Details_AM2026.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+          </div>
+
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#e2e8f0', fontWeight: 600 }}>📅 Exam Window Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inp} />
+          </div>
+        </div>
+      ) : inputMode === 'single' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ background: '#1e293b', padding: 14, borderRadius: 8, border: '1px solid #10b981' }}>
+            <label style={{ ...lbl, color: '#34d399', fontWeight: 700, fontSize: 13 }}>📗 Master Registration Excel File (e.g. Regular_All Courses.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setMasterFile(e.target.files[0])} style={{ ...inp, padding: '6px' }} />
+          </div>
+
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <label style={{ ...lbl, color: '#f87171', fontWeight: 600 }}>🚨 Arrear Exam Details File (Optional)</label>
             <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
           </div>
 
@@ -243,9 +249,10 @@ export default function TriggerForm({ onTrigger, disabled }) {
               </div>
             </div>
           ))}
-          <div style={{ background: '#1e293b', padding: 10, borderRadius: 8, border: '1px solid #334155' }}>
-            <label style={lbl}>🚨 Arrear Exam File (Optional .xlsx, .csv)</label>
+          <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '2px dashed #f59e0b' }}>
+            <label style={{ ...lbl, color: '#fbbf24', fontWeight: 700, fontSize: 13 }}>🚨 Arrear Exam Details File (Year-Wise Mode — e.g. Arrear Details_AM2026.xlsx)</label>
             <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArrearFile(e.target.files[0])} style={{ ...inp, padding: '5px' }} />
+            {arrearFile && <div style={{ fontSize: 11, color: '#34d399', marginTop: 4, fontWeight: 700 }}>✓ Attached Arrear File: {arrearFile.name}</div>}
           </div>
         </div>
       )}

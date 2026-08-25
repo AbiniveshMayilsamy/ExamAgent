@@ -96,7 +96,7 @@ async function triggerPipeline(req, res) {
   if (humanIntervention) pyArgs.push('--human-intervention')
 
   const py = spawn(
-    process.env.PYTHON_PATH || 'python',
+    process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3'),
     pyArgs,
     {
       env: { ...process.env, AGENTS_PATH: agentsPath,

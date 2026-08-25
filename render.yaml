@@ -4,10 +4,13 @@ services:
     env: node
     plan: free
     rootDir: exam-dashboard/server
-    buildCommand: npm install
+    buildCommand: npm install && (pip3 install -r ../../requirements.txt || true)
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PYTHON_PATH
+        value: python3
       - key: CLIENT_URL
         value: https://schedulex-ai-sece.web.app
+

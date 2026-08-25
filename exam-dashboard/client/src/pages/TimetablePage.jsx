@@ -507,21 +507,39 @@ export default function TimetablePage() {
 
         {/* MODE 1: Consolidated Master Matrix Grid View (Matching 1. Consolidated ESE Excel Layout) */}
         {viewMode === 'matrix' && (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1.5px solid #cbd5e1' }}>
+            <div style={{
+              fontSize: 11, color: '#0369a1', background: '#e0f2fe',
+              padding: '6px 16px', fontWeight: 700, borderBottom: '1px solid #bae6fd',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+            }}>
+              <span>↔ Horizontal Matrix Grid View ({activeDepts.length} Departments)</span>
+              <span>Scroll horizontally ➔ to view all branches</span>
+            </div>
+
+            <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', minWidth: 1200, borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#0f172a', color: '#ffffff', textAlign: 'center' }}>
-                    <th style={{ padding: '10px 12px', border: '1px solid #334155', minWidth: 100 }}>Date</th>
-                    <th style={{ padding: '10px 8px', border: '1px solid #334155', minWidth: 50 }}>Day</th>
-                    <th style={{ padding: '10px 8px', border: '1px solid #334155', minWidth: 55 }}>Ses</th>
+                    <th style={{
+                      padding: '10px 10px', border: '1px solid #334155', minWidth: 95, width: 95,
+                      position: 'sticky', left: 0, zIndex: 12, background: '#0f172a'
+                    }}>Date</th>
+                    <th style={{
+                      padding: '10px 6px', border: '1px solid #334155', minWidth: 50, width: 50,
+                      position: 'sticky', left: 95, zIndex: 12, background: '#0f172a'
+                    }}>Day</th>
+                    <th style={{
+                      padding: '10px 6px', border: '1px solid #334155', minWidth: 55, width: 55,
+                      position: 'sticky', left: 145, zIndex: 12, background: '#0f172a'
+                    }}>Ses</th>
                     {activeDepts.map(dept => (
                       <th
                         key={dept}
                         style={{
-                          padding: '10px 14px',
+                          padding: '10px 12px',
                           border: '1px solid #334155',
-                          minWidth: 140,
+                          minWidth: 120,
                           background: '#1e293b',
                           color: '#ffffff',
                           fontWeight: 800
@@ -533,53 +551,67 @@ export default function TimetablePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {matrixGrid.map((row, rIdx) => (
-                    <tr
-                      key={rIdx}
-                      style={{
-                        background: rIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                        borderBottom: '1px solid #e2e8f0'
-                      }}
-                    >
-                      <td style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'center', color: '#1e293b', borderRight: '1px solid #e2e8f0' }}>
-                        <div>{row.dateFormatted}</div>
-                        {patternType === 'semester_wise' && (
-                          <span style={{ fontSize: 9, background: '#f3e8ff', color: '#6d28d9', padding: '1px 5px', borderRadius: 4, fontWeight: 800, display: 'inline-block', marginTop: 3, border: '1px solid #c084fc' }}>
-                            Sem {row.daySem} Day
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: '8px 6px', fontWeight: 700, textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0' }}>
-                        {row.dayShort}
-                      </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center', borderRight: '1.5px solid #cbd5e1' }}>
-                        <span style={{
-                          background: row.session === 'FN' ? '#dbeafe' : '#fef3c7',
-                          color: row.session === 'FN' ? '#1e40af' : '#b45309',
-                          fontWeight: 800, padding: '3px 8px', borderRadius: 4, fontSize: 11
+                  {matrixGrid.map((row, rIdx) => {
+                    const rowBg = rIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                    return (
+                      <tr
+                        key={rIdx}
+                        style={{
+                          background: rowBg,
+                          borderBottom: '1px solid #e2e8f0'
+                        }}
+                      >
+                        <td style={{
+                          padding: '8px 10px', fontWeight: 800, textAlign: 'center', color: '#1e293b',
+                          borderRight: '1px solid #cbd5e1', borderBottom: '1px solid #e2e8f0',
+                          position: 'sticky', left: 0, zIndex: 10, background: rowBg
                         }}>
-                          {row.session}
-                        </span>
-                        {patternType === 'semester_wise' && (
-                          <div style={{ fontSize: 9, fontWeight: 700, color: row.session === 'FN' ? '#2563eb' : '#d97706', marginTop: 2 }}>
-                            {row.session === 'FN' ? 'Regular' : 'Arrear'}
-                          </div>
-                        )}
-                      </td>
+                          <div>{row.dateFormatted}</div>
+                          {patternType === 'semester_wise' && (
+                            <span style={{ fontSize: 9, background: '#f3e8ff', color: '#6d28d9', padding: '1px 5px', borderRadius: 4, fontWeight: 800, display: 'inline-block', marginTop: 3, border: '1px solid #c084fc' }}>
+                              Sem {row.daySem} Day
+                            </span>
+                          )}
+                        </td>
+                        <td style={{
+                          padding: '8px 6px', fontWeight: 700, textAlign: 'center', color: '#64748b',
+                          borderRight: '1px solid #cbd5e1', borderBottom: '1px solid #e2e8f0',
+                          position: 'sticky', left: 95, zIndex: 10, background: rowBg
+                        }}>
+                          {row.dayShort}
+                        </td>
+                        <td style={{
+                          padding: '8px 6px', textAlign: 'center',
+                          borderRight: '2px solid #94a3b8', borderBottom: '1px solid #e2e8f0',
+                          position: 'sticky', left: 145, zIndex: 10, background: rowBg
+                        }}>
+                          <span style={{
+                            background: row.session === 'FN' ? '#dbeafe' : '#fef3c7',
+                            color: row.session === 'FN' ? '#1e40af' : '#b45309',
+                            fontWeight: 800, padding: '3px 8px', borderRadius: 4, fontSize: 11
+                          }}>
+                            {row.session}
+                          </span>
+                          {patternType === 'semester_wise' && (
+                            <div style={{ fontSize: 9, fontWeight: 700, color: row.session === 'FN' ? '#2563eb' : '#d97706', marginTop: 2 }}>
+                              {row.session === 'FN' ? 'Regular' : 'Arrear'}
+                            </div>
+                          )}
+                        </td>
 
-                      {activeDepts.map(dept => {
-                        const exams = row.deptMap[dept] || []
+                        {activeDepts.map(dept => {
+                          const exams = row.deptMap[dept] || []
 
-                        return (
-                          <td
-                            key={dept}
-                            style={{
-                              padding: '8px',
-                              border: '1px solid #e2e8f0',
-                              verticalAlign: 'top',
-                              background: exams.length > 0 ? '#ffffff' : 'transparent'
-                            }}
-                          >
+                          return (
+                            <td
+                              key={dept}
+                              style={{
+                                padding: '8px',
+                                border: '1px solid #e2e8f0',
+                                verticalAlign: 'top',
+                                background: exams.length > 0 ? '#ffffff' : 'transparent'
+                              }}
+                            >
                             {exams.length === 0 ? (
                               <div style={{ color: '#cbd5e1', textAlign: 'center', fontSize: 11 }}>—</div>
                             ) : (
@@ -633,8 +665,9 @@ export default function TimetablePage() {
                         )
                       })}
                     </tr>
-                  ))}
-                </tbody>
+                  )
+                })}
+              </tbody>
               </table>
             </div>
           </div>

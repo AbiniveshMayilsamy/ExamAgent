@@ -252,7 +252,7 @@ export default function StudentsPage() {
       <div className="page-body">
         {/* Search & Filter Toolbar */}
         <div className="card" style={{ padding: '16px 20px', marginBottom: 20 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, alignItems: 'center' }}>
+          <div className="students-filter-grid">
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>Search Student</label>
               <input
@@ -309,8 +309,8 @@ export default function StudentsPage() {
 
         {/* Student Table */}
         <div className="card">
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span>Registered Students ({filteredStudents.length})</span>
               <button
                 onClick={handleBulkDownloadCSE}
@@ -336,7 +336,7 @@ export default function StudentsPage() {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
             <table className="table">
               <thead>
                 <tr>
@@ -388,7 +388,7 @@ export default function StudentsPage() {
                         </div>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-outline btn-sm"
                             onClick={() => handleOpenDetails(s)}
@@ -433,9 +433,9 @@ export default function StudentsPage() {
       {/* Student Detail Drawer */}
       {isDetailDrawerOpen && activeStudent && (
         <div style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width: 480,
+          position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: 480,
           background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
-          zIndex: 900, padding: 24, overflowY: 'auto'
+          zIndex: 900, padding: 24, overflowY: 'auto', boxSizing: 'border-box'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Profile & Examinations</h3>

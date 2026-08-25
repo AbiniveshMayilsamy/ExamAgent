@@ -5,9 +5,32 @@ conflict resolution guidance, and schedule summary generation.
 import os
 import json
 import logging
-import requests
+import urllib.request
+import urllib.error
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 logger = logging.getLogger(__name__)
+
+def _post_ollama_chat(ollama_url: str, payload: dict, timeout: int = 8):
+    """Post JSON payload to Ollama server, using requests if available or urllib fallback."""
+    target_url = f"{ollama_url.rstrip('/')}/api/chat"
+    if requests is not None:
+        resp = requests.post(target_url, json=payload, timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    
+    # Fallback using standard library urllib
+    data_bytes = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(target_url, data=data_bytes, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        if resp.status == 200:
+            return json.loads(resp.read().decode('utf-8'))
+    return None
 
 # Default fallback difficulty tagging if AI service is not available
 FALLBACK_HARD_PREFIXES = ["MA", "MATH", "PH", "PHYS", "CH", "CHEM", "EE", "EC", "ME", "CS4", "CS5"]
@@ -63,7 +86,7 @@ def assess_course_difficulties(courses: list, groq_api_key: str = None) -> dict:
 
     # 2. Try Local Ollama Endpoint
     try:
-        resp = requests.post(f"{ollama_url}/api/chat", json={
+        res_data = _post_ollama_chat(ollama_url, {
             "model": ollama_model,
             "messages": [
                 {"role": "system", "content": "You output only clean, valid JSON."},
@@ -71,8 +94,8 @@ def assess_course_difficulties(courses: list, groq_api_key: str = None) -> dict:
             ],
             "stream": False
         }, timeout=8)
-        if resp.status_code == 200:
-            content = resp.json().get("message", {}).get("content", "").strip()
+        if res_data:
+            content = res_data.get("message", {}).get("content", "").strip()
             parsed = _parse_json_response(content)
             if parsed:
                 return parsed
@@ -132,7 +155,7 @@ def generate_schedule_summary(schedule: dict, groq_api_key: str = None) -> str:
             pass
 
     try:
-        resp = requests.post(f"{ollama_url}/api/chat", json={
+        res_data = _post_ollama_chat(ollama_url, {
             "model": ollama_model,
             "messages": [
                 {"role": "system", "content": "You write concise executive summaries of exam schedules."},
@@ -140,8 +163,8 @@ def generate_schedule_summary(schedule: dict, groq_api_key: str = None) -> str:
             ],
             "stream": False
         }, timeout=8)
-        if resp.status_code == 200:
-            return resp.json().get("message", {}).get("content", "").strip()
+        if res_data:
+            return res_data.get("message", {}).get("content", "").strip()
     except Exception:
         pass
 

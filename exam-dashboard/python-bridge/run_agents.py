@@ -15,6 +15,9 @@ from collections import defaultdict
 # Add exam-cell-agent to python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../exam-cell-agent')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../exam-cell-agent')))
+agents_env = os.environ.get("AGENTS_PATH")
+if agents_env and os.path.exists(agents_env):
+    sys.path.insert(0, os.path.abspath(agents_env))
 
 from data_loader import load_multi_year_dataset, build_dept_roll_ranges
 from agent1_calendar import build_calendar

@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     rootDir: exam-dashboard/server
-    buildCommand: npm install && (pip3 install -r ../../requirements.txt || true)
+    buildCommand: npm install && (pip3 install --break-system-packages -r ../../requirements.txt || python3 -m pip install --break-system-packages -r ../../requirements.txt || true)
     startCommand: npm start
     envVars:
       - key: NODE_ENV

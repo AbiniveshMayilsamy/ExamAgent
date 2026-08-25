@@ -161,7 +161,8 @@ async function handleEvent(io, runId, evt, py) {
   // Memory store update helpers
   const updateField = async (path, value) => {
     if (!getDbReady()) {
-      const run = store.runs.get(`mem_${runId}`)
+      const key = runId.startsWith('mem_') ? runId : `mem_${runId}`
+      const run = store.runs.get(key)
       if (!run) return
       const parts = path.split('.')
       let obj = run
@@ -179,8 +180,9 @@ async function handleEvent(io, runId, evt, py) {
     await updateField(`agents.${idx}.status`, 'running')
   } else if (evt.event === 'agent_log') {
     if (!getDbReady()) {
-      const run = store.runs.get(`mem_${runId}`)
-      if (run && run.agents[idx]) run.agents[idx].logs.push(evt.message)
+      const key = runId.startsWith('mem_') ? runId : `mem_${runId}`
+      const run = store.runs.get(key)
+      if (run && run.agents && run.agents[idx]) run.agents[idx].logs.push(evt.message)
     } else {
       await Run.findByIdAndUpdate(runId, { $push: { [`agents.${idx}.logs`]: evt.message } })
     }
@@ -200,6 +202,12 @@ async function handleEvent(io, runId, evt, py) {
     await updateField('conflicts', evt.conflicts)
     await updateField('agentStats', evt.agentStats)
     await updateField('deptRollRanges', evt.deptRollRanges)
+    if (evt.totalExams !== undefined) await updateField('totalExams', evt.totalExams)
+    if (evt.totalArrears !== undefined) await updateField('totalArrears', evt.totalArrears)
+    if (evt.students !== undefined) await updateField('students', evt.students)
+    if (evt.aiSummary !== undefined) await updateField('aiSummary', evt.aiSummary)
+    if (evt.startDate !== undefined) await updateField('startDate', evt.startDate)
+    if (evt.endDate !== undefined) await updateField('endDate', evt.endDate)
     await updateField('finishedAt', new Date())
   } else if (evt.event === 'pipeline_fail') {
     await updateField('status', 'failed')

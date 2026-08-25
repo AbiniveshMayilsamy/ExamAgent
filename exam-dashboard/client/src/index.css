@@ -643,10 +643,75 @@ p  { color: #475569; line-height: 1.6; }
   .sdi-industry-grid { grid-template-columns: 1fr 1fr; }
 }
 
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column !important;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    position: sticky !important;
+    top: 0;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1.5px solid #e2e8f0;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+
+  .sidebar nav {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    padding: 6px 8px !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px !important;
+  }
+
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+  }
+
+  .page-header {
+    padding: 14px 16px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    position: relative !important;
+  }
+
+  .page-header h1 {
+    font-size: 20px !important;
+  }
+
+  .page-header p {
+    font-size: 11px !important;
+  }
+
+  .page-body {
+    padding: 16px 12px !important;
+  }
+
+  .card {
+    padding: 14px 14px !important;
+    border-radius: 8px !important;
+  }
+}
+
 @media (max-width: 640px) {
   .sdi-solutions-grid { grid-template-columns: 1fr; }
   .sdi-stats-grid { grid-template-columns: 1fr; }
   .sdi-nav-links { display: none; }
   .sdi-hero-title { font-size: 32px; }
   .sdi-section { padding: 48px 24px; }
+  .page-body { padding: 12px 8px !important; }
 }
